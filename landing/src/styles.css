@@ -1,0 +1,314 @@
+:root {
+  --bg: #fbfaf4;
+  --panel: #ffffff;
+  --ink: #15181f;
+  --muted: #5f6674;
+  --dark: #0d1626;
+  --accent: #f7b81f;
+  --accent-ink: #17120b;
+  --line: #ece7d7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.site {
+  min-height: 100vh;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 5vw;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 92%, white 8%);
+  backdrop-filter: blur(8px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.brand-mark {
+  color: var(--dark);
+}
+
+.brand-text {
+  color: var(--accent);
+}
+
+.nav {
+  display: flex;
+  gap: 1.1rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.auth-links {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.link {
+  color: var(--muted);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  padding: 0.72rem 1.1rem;
+}
+
+.btn-sm {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.92rem;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink);
+}
+
+main,
+.footer,
+.legal {
+  width: min(1080px, 90vw);
+  margin: 0 auto;
+}
+
+.hero {
+  padding: 5rem 0 3rem;
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: 1.2fr 1fr;
+}
+
+.hero-copy h1 {
+  margin: 0.35rem 0 0.8rem;
+  font-size: clamp(2rem, 5vw, 4rem);
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+}
+
+.hero-copy h1 span {
+  color: var(--accent);
+}
+
+.hero-copy p {
+  margin: 0;
+  color: var(--muted);
+  max-width: 54ch;
+  line-height: 1.6;
+}
+
+.eyebrow {
+  margin: 0 0 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #a0894f;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.hero-ctas {
+  margin-top: 1.3rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.hero-cards {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1rem;
+  box-shadow: 0 10px 24px rgba(17, 24, 39, 0.06);
+}
+
+.stat h3,
+.card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.stat strong {
+  display: block;
+  margin-top: 0.6rem;
+  font-size: 1.6rem;
+}
+
+.stat p,
+.card p {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+}
+
+.section {
+  padding: 3.5rem 0;
+}
+
+.section h2 {
+  margin: 0.3rem 0 0.8rem;
+  font-size: clamp(1.5rem, 2.6vw, 2.4rem);
+}
+
+.section p {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.split {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: 1.05fr 1fr;
+}
+
+.stack {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.stack li {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 0.95rem;
+}
+
+.stack strong {
+  display: block;
+  margin-bottom: 0.28rem;
+}
+
+.stack span {
+  color: var(--muted);
+}
+
+.grid {
+  margin-top: 1rem;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cta {
+  margin: 2rem auto 3.5rem;
+  background: var(--dark);
+  color: #f9fafb;
+  border-radius: 18px;
+  padding: 2.3rem;
+}
+
+.cta .eyebrow {
+  color: #f4ce66;
+}
+
+.cta h2 {
+  margin: 0;
+  font-size: clamp(1.4rem, 3vw, 2.1rem);
+  line-height: 1.2;
+}
+
+.cta .btn-ghost {
+  color: #f9fafb;
+  border-color: #c4d0e6;
+}
+
+.footer {
+  padding: 1.6rem 0 0.8rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.footer-brand p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.footer-links {
+  display: flex;
+  gap: 1rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.legal {
+  padding: 1rem 0 1.8rem;
+}
+
+.legal h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.legal p {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+@media (max-width: 960px) {
+  .hero,
+  .split,
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .nav {
+    display: none;
+  }
+
+  .header {
+    padding: 0.85rem 4vw;
+  }
+
+  .footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

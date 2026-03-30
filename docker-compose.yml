@@ -1,0 +1,36 @@
+services:
+  api:
+    build:
+      context: ./backend/api
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    env_file:
+      - ./.env
+    ports:
+      - "8000:8000"
+    environment:
+      # Keep DB host pinned to docker network service name.
+      DATABASE_URL: "postgresql://servops:servops@db:5432/servops"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/api:/app
+
+  db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: servops
+      POSTGRES_USER: servops
+      POSTGRES_PASSWORD: servops
+    volumes:
+      - servops_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U servops -d servops"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  servops_pg_data:

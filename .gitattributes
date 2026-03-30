@@ -1,0 +1,2 @@
+# Cross-platform repo hygiene: normalize text line endings for Windows/Linux/macOS clones.
+* text=auto eol=lf

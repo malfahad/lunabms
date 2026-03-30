@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Luna BMS",
+    "description": "Luna Business Management System",
+    "slug": "servops-fieldops",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "servops-fieldops",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f8f9ff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.servops.fieldops"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#00333f"
+      },
+      "package": "com.servops.fieldops"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Luna BMS to attach expense receipts from your photo library.",
+          "cameraPermission": "Allow Luna BMS to photograph receipts for expenses."
+        }
+      ],
+      "expo-notifications"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

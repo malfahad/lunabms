@@ -37,3 +37,5 @@ apps/*/*.tsbuildinfo
 backend/api/.venv/
 backend/api/__pycache__/
 backend/api/**/*.pyc
+dist/*
+landing/dist/*

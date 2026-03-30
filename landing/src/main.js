@@ -16,7 +16,6 @@ app.innerHTML = `
       <nav class="nav">
         <a href="#why">Why</a>
         <a href="#features">Features</a>
-        <a href="#legal">Legal</a>
       </nav>
       <div class="auth-links">
         <a class="link" href="${loginUrl}">Sign in</a>
@@ -97,38 +96,16 @@ app.innerHTML = `
       </section>
     </main>
 
-    <footer id="legal" class="footer">
+    <footer class="footer">
       <div class="footer-brand">
         <strong>Luna BMS</strong>
         <p>Luna Business Management System</p>
       </div>
       <div class="footer-links">
-        <a href="#terms">Terms</a>
-        <a href="#privacy">Privacy</a>
-        <a href="#cookies">Cookies</a>
+        <a href="/terms.html">Terms</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="/cookies.html">Cookies</a>
       </div>
     </footer>
-
-    <section id="terms" class="legal">
-      <h3>Terms of Use</h3>
-      <p>
-        By using Luna BMS, you agree to use the service lawfully and protect your account credentials. You are
-        responsible for activity under your account and data entered by your organization.
-      </p>
-    </section>
-    <section id="privacy" class="legal">
-      <h3>Privacy Notice</h3>
-      <p>
-        Luna BMS processes business and account data to provide core product functionality, sync, and support. We
-        apply reasonable security controls and only use data as needed to operate and improve the service.
-      </p>
-    </section>
-    <section id="cookies" class="legal">
-      <h3>Cookie Policy</h3>
-      <p>
-        We use essential cookies for authentication and session continuity. Analytics or preference cookies may be
-        added with clear notice and controls where required.
-      </p>
-    </section>
   </div>
 `;

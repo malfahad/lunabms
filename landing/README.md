@@ -2,6 +2,13 @@
 
 Standalone marketing + legal + auth entry landing site.
 
+Pages:
+
+- `/` marketing landing
+- `/terms.html` terms of use
+- `/privacy.html` privacy notice
+- `/cookies.html` cookie policy
+
 ## Environment
 
 Copy `.env.example` to `.env` and set:

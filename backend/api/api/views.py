@@ -450,7 +450,10 @@ class SyncPushView(APIView):
         for change in incoming:
             queue_id = change["id"]
             try:
-                ProcessedMutation.objects.create(tenant=tenant, mutation_id=queue_id)
+                # Isolate duplicate-mutation collisions in a savepoint so they
+                # do not break the outer sync transaction.
+                with transaction.atomic():
+                    ProcessedMutation.objects.create(tenant=tenant, mutation_id=queue_id)
             except IntegrityError:
                 results.append({"queue_id": queue_id, "status": "duplicate"})
                 continue

@@ -290,6 +290,49 @@ main,
   line-height: 1.6;
 }
 
+.legal-shell {
+  width: min(860px, 90vw);
+  margin: 0 auto;
+  padding: 4rem 0 2.8rem;
+}
+
+.legal-shell h1 {
+  margin: 0.35rem 0 0.9rem;
+  font-size: clamp(2rem, 4.5vw, 3.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.legal-shell p {
+  margin: 0 0 0.95rem;
+  color: var(--muted);
+  line-height: 1.72;
+  font-size: 1rem;
+}
+
+.legal-updated {
+  margin-top: 0;
+  margin-bottom: 1.1rem;
+  font-size: 0.95rem;
+  color: #7b828e;
+  font-family: inherit;
+}
+
+.legal-section {
+  margin-top: 1.35rem;
+}
+
+.legal-section h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.1rem;
+  line-height: 1.35;
+}
+
+.legal-home-link {
+  color: var(--dark);
+  font-weight: 600;
+}
+
 @media (max-width: 960px) {
   .hero,
   .split,

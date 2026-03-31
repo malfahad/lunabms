@@ -21,6 +21,7 @@ import {
   pickMediaAttachments,
   saveAttachmentToStorage,
 } from "../../../lib/postAttachments";
+import { resolveApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { hydrateLibraryFromPostAttachments } from "../../../lib/webMediaLibrary";
 import { sharedStyles } from "../../../theme/styles";
 import { colors, fonts, space } from "../../../theme/tokens";
@@ -48,7 +49,7 @@ export default function UpdatesScreen() {
   const [posting, setPosting] = useState(false);
   const [allAttachments, setAllAttachments] = useState([]);
   const mediaUploadUrl = useMemo(() => {
-    const base = "http://localhost:8000";
+    const base = resolveApiBaseUrl();
     return `${base}/api/media/upload/`;
   }, []);
 

@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system";
 import { getLibrarySnapshot, hydrateLibraryFromPostAttachments, parseMediaIdbKey } from "./webMediaLibrary";
+import { resolveApiBaseUrl } from "./apiBaseUrl";
 
 const SYNC_BUSINESS_KEY = "sync_business_name";
 const SYNC_BUSINESS_USERNAME_KEY = "sync_business_username";
@@ -14,7 +15,7 @@ const SYNC_LICENSE_EXPIRES_AT_KEY = "sync_license_expires_at";
 const COMPANY_LOGO_URL_KEY = "company_logo_url";
 const COMPANY_LOGO_LOCAL_URL_KEY = "company_logo_local_url";
 
-const DEFAULT_BASE_URL = "http://localhost:8000";
+const DEFAULT_BASE_URL = resolveApiBaseUrl();
 const AUTO_INTERVAL_MS = 15000;
 
 function safeJsonParse(value, fallback = null) {

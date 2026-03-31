@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { escapeHtml, formatMoney, invoiceTotal } from "@servops/core";
+import { escapeHtml, formatMoney, invoiceTotal } from "@lunabms/core";
 import { FinanceCard } from "../../components/FinanceCard";
 import { ListEmptyState } from "../../components/ListEmptyState";
 import { SimpleModal } from "../../components/SimpleModal";
@@ -75,6 +75,14 @@ function formatDay(ts) {
 function shortRef(id) {
   if (!id) return "—";
   return `...${String(id).slice(0, 8)}`;
+}
+
+function isVoidedInvoice(inv) {
+  return String(inv?.status || "").toLowerCase() === "voided";
+}
+
+function isVoidedPayment(payment) {
+  return String(payment?.status || "").toLowerCase() === "voided";
 }
 
 function startOfDayTs(ts) {
@@ -233,6 +241,7 @@ export default function ReportsScreen() {
   const invoicesByProject = useMemo(() => {
     const map = {};
     for (const inv of invoices) {
+      if (isVoidedInvoice(inv)) continue;
       if (!map[inv.project_id]) map[inv.project_id] = [];
       map[inv.project_id].push(inv);
     }
@@ -241,6 +250,7 @@ export default function ReportsScreen() {
   const paymentsByInvoice = useMemo(() => {
     const map = {};
     for (const p of payments) {
+      if (isVoidedPayment(p)) continue;
       if (!map[p.invoice_id]) map[p.invoice_id] = [];
       map[p.invoice_id].push(p);
     }
@@ -293,7 +303,9 @@ export default function ReportsScreen() {
     if (selectedReport.id === REPORT_IDS.cashflow) {
       const buckets = {};
       for (const p of payments) {
+        if (isVoidedPayment(p)) continue;
         const inv = invoiceById[p.invoice_id];
+        if (!inv || isVoidedInvoice(inv)) continue;
         const projectId = inv?.project_id;
         if (!projectId || !matchesProjectAndClient(projectId, flt)) continue;
         const ts = paymentTs(p);
@@ -332,6 +344,7 @@ export default function ReportsScreen() {
       const now = Date.now();
       const rows = [];
       for (const inv of invoices) {
+        if (isVoidedInvoice(inv)) continue;
         const project = projectById[inv.project_id];
         if (!project || !matchesProjectAndClient(project.id, flt)) continue;
         const refTs = invoiceTs(inv);
@@ -521,10 +534,175 @@ export default function ReportsScreen() {
     return [dateLabel, projectLabel, clientLabel, ...extras].join(" | ");
   }
 
+  function detailedExportRowsAndColumns() {
+    const flt = appliedFilters;
+    if (!selectedReport) return { rows: [], columns: [] };
+
+    if (selectedReport.id === REPORT_IDS.cashflow) {
+      const rows = [];
+      for (const p of payments) {
+        if (isVoidedPayment(p)) continue;
+        const inv = invoiceById[p.invoice_id];
+        if (!inv || isVoidedInvoice(inv)) continue;
+        const projectId = inv.project_id;
+        if (!projectId || !matchesProjectAndClient(projectId, flt)) continue;
+        const ts = paymentTs(p);
+        if (!isInRange(ts, flt.dateRange)) continue;
+        rows.push({
+          sortTs: ts,
+          date: formatDay(ts),
+          entryType: "Payment",
+          project: projectById[projectId]?.name ?? "—",
+          client: clientById[projectClientId(projectId)]?.name ?? "—",
+          reference: shortRef(p.id),
+          detail: p.method || "—",
+          cashIn: Number(p.amount),
+          cashOut: 0,
+          net: Number(p.amount),
+        });
+      }
+      for (const e of expenses) {
+        const projectId = e.project_id;
+        if (!projectId || !matchesProjectAndClient(projectId, flt)) continue;
+        const ts = expenseTs(e);
+        if (!isInRange(ts, flt.dateRange)) continue;
+        rows.push({
+          sortTs: ts,
+          date: formatDay(ts),
+          entryType: "Expense",
+          project: projectById[projectId]?.name ?? "—",
+          client: clientById[projectClientId(projectId)]?.name ?? "—",
+          reference: shortRef(e.id),
+          detail: e.category || e.supplier_name || "—",
+          cashIn: 0,
+          cashOut: Number(e.amount),
+          net: -Number(e.amount),
+        });
+      }
+      rows.sort((a, b) => Number(b.sortTs || 0) - Number(a.sortTs || 0));
+      return {
+        rows,
+        columns: [
+          { key: "date", label: "Date" },
+          { key: "entryType", label: "Type" },
+          { key: "project", label: "Project" },
+          { key: "client", label: "Client" },
+          { key: "reference", label: "Ref" },
+          { key: "detail", label: "Detail" },
+          { key: "cashIn", label: "Cash In", numeric: true },
+          { key: "cashOut", label: "Cash Out", numeric: true },
+          { key: "net", label: "Net", numeric: true },
+        ],
+      };
+    }
+
+    if (selectedReport.id === REPORT_IDS.jobProfit) {
+      const rows = [];
+      for (const p of payments) {
+        if (isVoidedPayment(p)) continue;
+        const inv = invoiceById[p.invoice_id];
+        if (!inv || isVoidedInvoice(inv)) continue;
+        const projectId = inv.project_id;
+        const project = projectById[projectId];
+        if (!project) continue;
+        const archived = Number(project.archived ?? 0) === 1;
+        if (flt.projectStatus === "active" && archived) continue;
+        if (flt.projectStatus === "archived" && !archived) continue;
+        if (flt.projectId !== "all" && projectId !== flt.projectId) continue;
+        const clientId = projectClientId(projectId);
+        if (flt.clientId !== "all" && clientId !== flt.clientId) continue;
+        const ts = paymentTs(p);
+        if (!isInRange(ts, flt.dateRange)) continue;
+        rows.push({
+          sortTs: ts,
+          date: formatDay(ts),
+          project: project.name ?? "—",
+          client: clientById[clientId]?.name ?? "—",
+          entryType: "Payment",
+          reference: shortRef(p.id),
+          detail: p.method || "—",
+          cashIn: Number(p.amount),
+          cashOut: 0,
+          profitImpact: Number(p.amount),
+        });
+      }
+      for (const e of expenses) {
+        const projectId = e.project_id;
+        const project = projectById[projectId];
+        if (!project) continue;
+        const archived = Number(project.archived ?? 0) === 1;
+        if (flt.projectStatus === "active" && archived) continue;
+        if (flt.projectStatus === "archived" && !archived) continue;
+        if (flt.projectId !== "all" && projectId !== flt.projectId) continue;
+        const clientId = projectClientId(projectId);
+        if (flt.clientId !== "all" && clientId !== flt.clientId) continue;
+        const ts = expenseTs(e);
+        if (!isInRange(ts, flt.dateRange)) continue;
+        rows.push({
+          sortTs: ts,
+          date: formatDay(ts),
+          project: project.name ?? "—",
+          client: clientById[clientId]?.name ?? "—",
+          entryType: "Expense",
+          reference: shortRef(e.id),
+          detail: e.category || e.supplier_name || "—",
+          cashIn: 0,
+          cashOut: Number(e.amount),
+          profitImpact: -Number(e.amount),
+        });
+      }
+      rows.sort((a, b) => Number(b.sortTs || 0) - Number(a.sortTs || 0));
+      if (flt.profitState === "positive") {
+        return { rows: rows.filter((r) => Number(r.profitImpact) > 0), columns: [
+          { key: "date", label: "Date" },
+          { key: "project", label: "Project" },
+          { key: "client", label: "Client" },
+          { key: "entryType", label: "Type" },
+          { key: "reference", label: "Ref" },
+          { key: "detail", label: "Detail" },
+          { key: "cashIn", label: "Cash In", numeric: true },
+          { key: "cashOut", label: "Cash Out", numeric: true },
+          { key: "profitImpact", label: "Profit Impact", numeric: true },
+        ] };
+      }
+      if (flt.profitState === "negative") {
+        return { rows: rows.filter((r) => Number(r.profitImpact) < 0), columns: [
+          { key: "date", label: "Date" },
+          { key: "project", label: "Project" },
+          { key: "client", label: "Client" },
+          { key: "entryType", label: "Type" },
+          { key: "reference", label: "Ref" },
+          { key: "detail", label: "Detail" },
+          { key: "cashIn", label: "Cash In", numeric: true },
+          { key: "cashOut", label: "Cash Out", numeric: true },
+          { key: "profitImpact", label: "Profit Impact", numeric: true },
+        ] };
+      }
+      return {
+        rows,
+        columns: [
+          { key: "date", label: "Date" },
+          { key: "project", label: "Project" },
+          { key: "client", label: "Client" },
+          { key: "entryType", label: "Type" },
+          { key: "reference", label: "Ref" },
+          { key: "detail", label: "Detail" },
+          { key: "cashIn", label: "Cash In", numeric: true },
+          { key: "cashOut", label: "Cash Out", numeric: true },
+          { key: "profitImpact", label: "Profit Impact", numeric: true },
+        ],
+      };
+    }
+
+    // Unpaid invoices and Sales Won are already itemized datasets.
+    return rowsAndColumns;
+  }
+
   async function exportReportPdf() {
     if (!selectedReport) return;
-    const rows = rowsAndColumns.rows;
-    const columns = rowsAndColumns.columns;
+    const detail = detailedExportRowsAndColumns();
+    const rows = detail.rows;
+    const columns = detail.columns;
     if (rows.length === 0) return;
     const pdfRows = rows.map((r) => {
       const out = {};

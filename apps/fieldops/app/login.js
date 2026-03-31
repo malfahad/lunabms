@@ -33,12 +33,12 @@ export default function LoginScreen() {
           params: { businessUsername, email },
         });
       } else if (e?.gate === "license_expired") {
-        setGateHint("License is expired. Contact support@servops.com.");
+        setGateHint("License is expired. Contact support@lunabms.com.");
         router.replace({
           pathname: "/license-gate",
           params: {
             detail: String(e?.body?.detail || e?.message || "License is expired."),
-            cta: String(e?.body?.cta || "Contact support@servops.com"),
+            cta: String(e?.body?.cta || "Contact support@lunabms.com"),
           },
         });
       }

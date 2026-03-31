@@ -3,7 +3,7 @@
  *
  * Enforcement (Milestone 1):
  * - LWW: mutable entities use `expectedUpdatedAt` on update; mismatch → LWWConflictError.
- * - Append-only: `payments`, `posts`, `retainer_applications` — insert + read only in @servops/core repos (no update/delete).
+ * - Append-only: `payments`, `posts`, `retainer_applications` — insert + read only in @lunabms/core repos (no update/delete).
  */
 const CONFLICT_POLICY = Object.freeze({
   simpleFields: "last-write-wins",

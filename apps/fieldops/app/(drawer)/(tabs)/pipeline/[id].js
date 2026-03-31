@@ -15,7 +15,7 @@ import {
   LWWConflictError,
   UGANDA_VAT_RATE,
   formatMoney,
-} from "@servops/core";
+} from "@lunabms/core";
 import { sharePdfFromHtml } from "../../../../lib/sharePdf";
 import { loadImageAsDataUri } from "../../../../lib/pdfImageData";
 import { useRepos } from "../../../../context/DatabaseContext";

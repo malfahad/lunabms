@@ -1,7 +1,7 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, fonts, radius, shadow, space } from "../theme/tokens";
-import { formatMoney } from "@servops/core";
+import { formatMoney } from "@lunabms/core";
 
 function initialsFromName(name) {
   const parts = String(name || "")

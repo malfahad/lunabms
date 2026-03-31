@@ -314,6 +314,35 @@ ALTER TABLE projects ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
 UPDATE tasks SET status = 'todo' WHERE LOWER(TRIM(COALESCE(status, ''))) = 'open';
 `,
   },
+  {
+    version: 12,
+    sql: `
+ALTER TABLE payments ADD COLUMN status TEXT NOT NULL DEFAULT 'posted';
+UPDATE payments SET status = 'posted' WHERE status IS NULL OR TRIM(status) = '';
+CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+`,
+  },
+  {
+    version: 13,
+    sql: `
+CREATE TABLE IF NOT EXISTS post_attachments (
+  id TEXT PRIMARY KEY NOT NULL,
+  post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  parent_type TEXT NOT NULL CHECK (parent_type IN ('opportunity','project')),
+  parent_id TEXT NOT NULL,
+  attachment_type TEXT NOT NULL CHECK (attachment_type IN ('image','video','document')),
+  mime_type TEXT,
+  file_name TEXT NOT NULL,
+  file_size INTEGER NOT NULL DEFAULT 0,
+  storage_uri TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_post_attachments_post ON post_attachments(post_id);
+CREATE INDEX IF NOT EXISTS idx_post_attachments_parent ON post_attachments(parent_type, parent_id);
+`,
+  },
 ];
 
 const CURRENT_SCHEMA_VERSION = MIGRATIONS.length ? MIGRATIONS[MIGRATIONS.length - 1].version : 0;

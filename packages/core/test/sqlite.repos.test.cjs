@@ -250,6 +250,26 @@ test("Milestone 12 — app_settings + invoice reminder message", async () => {
   assert.ok(msg.includes("Jane"));
 });
 
+test("payments.insert blocks amount above invoice outstanding", async () => {
+  const engine = await openEngine();
+  const r = createRepos(engine);
+  const p = r.projects.insert({ name: "P-overpay" });
+  const inv = r.invoices.insert({ project_id: p.id, sub_total: 100, tax: 0, status: "issued" });
+  r.payments.insert({ invoice_id: inv.id, amount: 40, method: "cash" });
+  assert.equal(r.finance.amountDue(inv.id), 60);
+  assert.throws(
+    () => r.payments.insert({ invoice_id: inv.id, amount: 61, method: "cash" }),
+    /exceeds outstanding invoice balance/i
+  );
+  r.payments.insert({ invoice_id: inv.id, amount: 60, method: "cash" });
+  assert.equal(r.finance.amountDue(inv.id), 0);
+  assert.throws(
+    () => r.payments.insert({ invoice_id: inv.id, amount: 1, method: "cash" }),
+    /already fully paid/i
+  );
+  r.projects.delete(p.id);
+});
+
 test("Milestone 9 — retainer ledger, assignRetainer, opportunity_id, apply to invoice", async () => {
   const engine = await openEngine();
   const r = createRepos(engine);

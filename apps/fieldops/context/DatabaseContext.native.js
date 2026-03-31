@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { openDatabaseSync } from "expo-sqlite";
 import * as FileSystem from "expo-file-system";
-import { createSyncInboundApplier, runMigrations, createRepos } from "@servops/core";
+import { createSyncInboundApplier, runMigrations, createRepos } from "@lunabms/core";
 import { createSyncService } from "../lib/syncService";
 import { createLocalDatasetArchiveManager } from "./localDatasetArchive";
 

@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system";
+import { getLibrarySnapshot, hydrateLibraryFromPostAttachments, parseMediaIdbKey } from "./webMediaLibrary";
 
 const SYNC_BUSINESS_KEY = "sync_business_name";
 const SYNC_BUSINESS_USERNAME_KEY = "sync_business_username";
@@ -206,6 +207,44 @@ export function createSyncService({ repos, inboundApplier, localDatasetArchive =
 
   function isAuthFailure(error) {
     return Number(error?.status || 0) === 401;
+  }
+
+  async function reconcileUploadedLibraryToPostAttachments() {
+    if (Platform.OS !== "web") return;
+    const snapshot = await getLibrarySnapshot();
+    const items =
+      snapshot?.items && typeof snapshot.items === "object" ? Object.values(snapshot.items) : [];
+    const rows = repos.postAttachments?.listAll?.() || [];
+    const byAttachmentId = new Map(rows.map((row) => [String(row?.id || ""), row]));
+    const byIdbKey = new Map();
+    for (const row of rows) {
+      const key = parseMediaIdbKey(row?.storage_uri);
+      if (key) byIdbKey.set(key, row);
+    }
+    for (const it of items) {
+      const attachmentId = String(it?.attachmentId || "").trim();
+      const remoteUrl = String(it?.remoteUrl || "").trim();
+      const idbKey = String(it?.idbKey || "").trim();
+      if (!remoteUrl) continue;
+      const row = (attachmentId && byAttachmentId.get(attachmentId)) || (idbKey && byIdbKey.get(idbKey)) || null;
+      if (!row) continue;
+      if (String(row.storage_uri || "").trim() === remoteUrl) continue;
+      try {
+        const updated = repos.postAttachments.update(
+          row.id,
+          {
+            storage_uri: remoteUrl,
+            mime_type: it?.mimeType ?? row.mime_type,
+            file_size: it?.fileSize ?? row.file_size,
+            file_name: it?.fileName ?? row.file_name,
+          },
+          { expectedUpdatedAt: row.updated_at }
+        );
+        if (updated?.id) byAttachmentId.set(String(updated.id), updated);
+      } catch {
+        // best effort; race with inbound changes can happen.
+      }
+    }
   }
 
   async function ensureLogoLocalFromRemote() {
@@ -546,6 +585,13 @@ export function createSyncService({ repos, inboundApplier, localDatasetArchive =
       page += 1;
       if (changes.length < limit) break;
     }
+    if (Platform.OS === "web") {
+      try {
+        await hydrateLibraryFromPostAttachments(repos.postAttachments?.listAll?.() || []);
+      } catch {
+        // hydrate is best effort; pull should still succeed.
+      }
+    }
     await ensureLogoLocalFromRemote();
     return { pulled: totalPulled, applied: totalApplied, cursor };
   }
@@ -563,6 +609,9 @@ export function createSyncService({ repos, inboundApplier, localDatasetArchive =
     state.lastError = "";
     emit();
     try {
+      if (Platform.OS === "web") {
+        await reconcileUploadedLibraryToPostAttachments();
+      }
       const result = await withAutoRefresh(async (token) => {
         const pushStats = await pushPending(token, cfg);
         const pullStats = await pullInbound(token, cfg);

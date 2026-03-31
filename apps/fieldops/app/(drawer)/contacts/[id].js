@@ -4,7 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { LWWConflictError } from "@servops/core";
+import { LWWConflictError } from "@lunabms/core";
 import { FormField } from "../../../components/FormField";
 import { PrimaryButton } from "../../../components/PrimaryButton";
 import { SimpleModal } from "../../../components/SimpleModal";

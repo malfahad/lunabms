@@ -8,7 +8,7 @@ import { SimpleModal } from "../../../components/SimpleModal";
 import { useRepos } from "../../../context/DatabaseContext";
 import { sharedStyles } from "../../../theme/styles";
 import { colors, fonts, radius, space } from "../../../theme/tokens";
-import { formatMoney } from "@servops/core";
+import { formatMoney } from "@lunabms/core";
 
 function formatWhen(ts) {
   if (ts == null || ts === "") return "—";

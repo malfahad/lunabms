@@ -70,6 +70,24 @@ function buildBrandHeaderHtml(companyName, companyTagline, companyLogoDataUri) {
 
 /**
  * @param {string} title
+ * @param {string | null | undefined} subtitle
+ * @param {string[]} rightLines
+ */
+function buildDocumentHeaderHtml(title, subtitle, rightLines = []) {
+  const safeLines = (rightLines || []).filter((x) => x != null && String(x).trim() !== "");
+  return `<div class="report-head">
+    <div class="report-head-main">
+      <div class="report-title">${escapeHtml(title || "Report")}</div>
+      ${subtitle ? `<div class="report-subtitle">${escapeHtml(subtitle)}</div>` : ""}
+    </div>
+    <div class="report-head-side">
+      ${safeLines.length ? safeLines.map((line) => `<div>${escapeHtml(String(line))}</div>`).join("") : "<div>—</div>"}
+    </div>
+  </div>`;
+}
+
+/**
+ * @param {string} title
  * @param {string} innerBody
  */
 function docShell(title, innerBody) {
@@ -80,53 +98,66 @@ function docShell(title, innerBody) {
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>${escapeHtml(title)}</title>
 <style>
-  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1a1a1a; padding: 28px; max-width: 720px; margin: 0 auto; font-size: 14px; line-height: 1.45; }
-  h1 { font-size: 22px; margin: 0 0 6px; font-weight: 700; }
-  .company { font-size: 13px; color: #444; margin-bottom: 16px; }
-  .meta { font-size: 12px; color: #555; margin-bottom: 18px; }
-  .meta div { margin: 4px 0; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #666; padding: 10px 8px; border-bottom: 2px solid #ddd; }
-  td { padding: 10px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
-  .num { text-align: right; white-space: nowrap; }
-  .totals { margin-top: 20px; text-align: right; }
-  .totals-row { margin: 4px 0; font-size: 14px; }
-  .grand { font-size: 17px; font-weight: 700; margin-top: 10px; padding-top: 10px; border-top: 2px solid #ccc; }
-  .foot { margin-top: 32px; font-size: 11px; color: #888; }
+  body { font-family: "Arial", "Helvetica Neue", Helvetica, sans-serif; color: #101828; padding: 20px 18px; margin: 0 auto; max-width: 980px; font-size: 12px; line-height: 1.32; }
+  h1 { font-size: 18px; margin: 0 0 6px; font-weight: 700; letter-spacing: 0.01em; }
+  .company { font-size: 11px; color: #43536b; margin-bottom: 10px; }
+  .meta { font-size: 10px; color: #556378; margin-bottom: 10px; }
+  .meta div { margin: 2px 0; }
+  .report-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 10px; border: 1px solid #a9b7c9; background: #edf4ff; padding: 8px 10px; }
+  .report-head-main { flex: 1; min-width: 0; }
+  .report-head-side { text-align: right; font-size: 10px; color: #344054; line-height: 1.35; min-width: 150px; }
+  .report-title { font-size: 21px; font-weight: 800; color: #10213d; line-height: 1.1; }
+  .report-subtitle { font-size: 11px; color: #344054; margin-top: 2px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #1f2a37; padding: 6px 6px; border-top: 2px solid #7b8796; border-bottom: 2px solid #7b8796; background: #d9e6f5; }
+  td { padding: 5px 6px; border-bottom: 1px solid #e4e7ec; vertical-align: top; font-size: 11px; }
+  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .totals { margin-top: 10px; text-align: right; }
+  .totals-row { margin: 2px 0; font-size: 11px; }
+  .grand { font-size: 14px; font-weight: 800; margin-top: 5px; padding-top: 6px; border-top: 2px solid #7b8796; }
+  .foot { margin-top: 16px; font-size: 10px; color: #667085; }
   .profit-pos { color: #0d6b3e; font-weight: 600; }
   .profit-neg { color: #a61b1b; font-weight: 600; }
-  .intro { font-size: 13px; color: #444; margin-bottom: 18px; line-height: 1.5; }
-  .two-col { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-  .two-col td.col { width: 50%; vertical-align: top; padding: 0 12px 0 0; }
-  .two-col td.col:last-child { padding: 0 0 0 12px; }
-  .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #666; font-weight: 700; margin: 0 0 8px; }
-  .block { font-size: 13px; color: #222; line-height: 1.55; }
-  .block .line { margin: 3px 0; }
-  .section { margin-bottom: 18px; }
-  .kv { margin: 5px 0; font-size: 13px; }
+  .intro { font-size: 11px; color: #475467; margin-bottom: 10px; line-height: 1.45; }
+  .two-col { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  .two-col td.col { width: 50%; vertical-align: top; padding: 0 8px 0 0; }
+  .two-col td.col:last-child { padding: 0 0 0 8px; }
+  .section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #475467; font-weight: 700; margin: 0 0 5px; }
+  .block { font-size: 11px; color: #111827; line-height: 1.4; }
+  .block .line { margin: 2px 0; }
+  .section { margin-bottom: 10px; }
+  .kv { margin: 3px 0; font-size: 11px; }
   .kv .k { color: #555; font-weight: 600; }
   .kv .k::after { content: " "; }
-  .kv .v { color: #1a1a1a; }
-  .ref-full { font-size: 11px; color: #666; word-break: break-all; margin-top: 4px; }
-  .payment-highlight { background: #f3f7ff; border: 1px solid #d8e4ff; border-radius: 10px; padding: 14px; margin: 14px 0 18px; }
-  .amount-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: #3d5da8; font-weight: 700; margin-bottom: 4px; }
-  .amount-emphasis { font-size: 29px; line-height: 1.2; font-weight: 800; color: #12337a; margin: 0 0 10px; }
-  .divider { border-top: 1px solid #ddd; margin: 10px 0; }
+  .kv .v { color: #101828; }
+  .ref-full { font-size: 10px; color: #667085; word-break: break-all; margin-top: 3px; }
+  .payment-highlight { background: #f5f8ff; border: 1px solid #cfdaf0; border-radius: 6px; padding: 8px; margin: 8px 0 10px; }
+  .amount-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #214a9c; font-weight: 700; margin-bottom: 2px; }
+  .amount-emphasis { font-size: 20px; line-height: 1.15; font-weight: 800; color: #102b60; margin: 0 0 6px; }
+  .divider { border-top: 1px solid #d0d5dd; margin: 6px 0; }
   .muted { color: #555; }
-  .quote-highlight { background: #f8fafc; border: 1px solid #dbe4ef; border-radius: 10px; padding: 14px; margin: 12px 0 16px; }
-  .quote-tag { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: #3f556b; font-weight: 700; margin-bottom: 4px; }
-  .quote-service { font-size: 20px; line-height: 1.3; font-weight: 700; margin: 0 0 8px; color: #16202a; }
-  .quote-total { font-size: 26px; line-height: 1.2; font-weight: 800; color: #0f2f71; margin: 0; }
+  .num-mono { font-family: "Courier New", "Lucida Console", monospace; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+  .report-table { table-layout: fixed; }
+  .report-table tfoot td { border-top: 2px solid #7b8796; border-bottom: 2px solid #7b8796; background: #f2f5f9; font-weight: 700; }
+  .report-table .sum-label { text-transform: uppercase; letter-spacing: 0.05em; font-size: 10px; color: #1f2a37; }
+  .compact-row td { padding-top: 4px; padding-bottom: 4px; }
+  .quote-highlight { background: #f7fafc; border: 1px solid #d0d5dd; border-radius: 6px; padding: 8px; margin: 8px 0 10px; }
+  .quote-tag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #475467; font-weight: 700; margin-bottom: 2px; }
+  .quote-service { font-size: 14px; line-height: 1.25; font-weight: 700; margin: 0 0 4px; color: #16202a; }
+  .quote-total { font-size: 18px; line-height: 1.15; font-weight: 800; color: #0f2f71; margin: 0; }
   .scope-list { margin: 0; padding-left: 18px; }
-  .scope-list li { margin: 5px 0; }
-  .acceptance-lines { margin-top: 8px; }
-  .acceptance-lines .line { margin: 10px 0; white-space: pre; }
-  .brand-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 16px; padding: 0 0 10px; border-bottom: 1px solid #e6e6e6; }
-  .brand-logo-wrap { width: 140px; height: 56px; display: flex; align-items: center; justify-content: flex-end; flex: 0 0 auto; }
-  .brand-logo { max-width: 140px; max-height: 56px; object-fit: contain; }
+  .scope-list li { margin: 3px 0; }
+  .acceptance-lines { margin-top: 6px; }
+  .acceptance-lines .line { margin: 7px 0; white-space: pre; }
+  .watermark-wrap { position: relative; }
+  .watermark { position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%) rotate(-24deg); font-size: 72px; font-weight: 800; letter-spacing: 0.08em; color: rgba(160, 0, 0, 0.16); text-transform: uppercase; pointer-events: none; z-index: 1; white-space: nowrap; }
+  .watermark-wrap > *:not(.watermark) { position: relative; z-index: 2; }
+  .brand-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 10px; padding: 0 0 6px; border-bottom: 1px solid #d0d5dd; }
+  .brand-logo-wrap { width: 120px; height: 40px; display: flex; align-items: center; justify-content: flex-end; flex: 0 0 auto; }
+  .brand-logo { max-width: 120px; max-height: 40px; object-fit: contain; }
   .brand-meta { flex: 1 1 auto; min-width: 0; }
-  .brand-name { font-size: 18px; font-weight: 800; color: #122132; line-height: 1.2; }
-  .brand-tagline { font-size: 12px; color: #52606f; margin-top: 3px; line-height: 1.4; }
+  .brand-name { font-size: 14px; font-weight: 800; color: #122132; line-height: 1.2; }
+  .brand-tagline { font-size: 10px; color: #52606f; margin-top: 2px; line-height: 1.3; }
 </style>
 </head>
 <body>
@@ -309,10 +340,9 @@ function buildQuotationPdfHtml(opts) {
 
   const inner = `
   ${buildBrandHeaderHtml(companyName, companyTagline, companyLogoDataUri)}
-  <h1>QUOTATION</h1>
+  ${buildDocumentHeaderHtml("Quotation", prospectTitle || "Service quote", [issuedDisplay ? `Issued: ${issuedDisplay}` : "", `Ref: …${shortRef}`])}
   ${quoteSummary}
   ${fromBlock}${clientBlock}
-  ${valueSection}
   ${quoteDetailsSection}
   <table>
     <thead><tr>
@@ -329,6 +359,7 @@ function buildQuotationPdfHtml(opts) {
     }
     <div class="grand">TOTAL: ${formatMoneyWithCurrency(totalAmount, cc)}</div>
   </div>
+  ${valueSection}
   ${acceptanceSection}
   <div class="foot">All amounts are in ${escapeHtml(cc)}. Thank you for the opportunity to serve you.</div>
   `;
@@ -408,6 +439,7 @@ function buildInvoicePdfHtml(opts) {
     currencyCode,
   } = opts;
   const invoiceStatus = opts.invoiceStatus ?? opts.status ?? null;
+  const isVoided = String(invoiceStatus || "").toLowerCase() === "voided";
 
   const vatPercent = Math.round(UGANDA_VAT_RATE * 100);
   const fullRef = String(invoiceRef);
@@ -504,8 +536,9 @@ function buildInvoicePdfHtml(opts) {
       ? escapeHtml(String(balanceDueStr))
       : formatMoneyWithCurrency(totalAmount, cc);
 
-  const inner = `
+  const invoiceBody = `
   ${buildBrandHeaderHtml(business.companyName, business.companyTagline, business.companyLogoDataUri)}
+  ${buildDocumentHeaderHtml("Invoice", project?.name || null, [issuedDateStr ? `Issued: ${issuedDateStr}` : "", dueDateStr ? `Due: ${dueDateStr}` : "", `Ref: …${shortRef}`])}
   <table class="two-col">
     <tr>
       <td class="col">
@@ -536,7 +569,7 @@ function buildInvoicePdfHtml(opts) {
     </tr></thead>
     <tbody>${lineRows}</tbody>
   </table>
-  <div class="section" style="margin-top:18px;border:1px solid #ddd;border-radius:10px;padding:12px;">
+  <div class="section" style="margin-top:8px;border:1px solid #d0d5dd;border-radius:6px;padding:8px;">
     <div class="section-title">Payment summary</div>
     <div class="kv"><span class="k">Subtotal</span><span class="v">${formatMoneyWithCurrency(subTotal, cc)}</span></div>
     ${
@@ -550,6 +583,9 @@ function buildInvoicePdfHtml(opts) {
   </div>
   <div class="foot">Payment due within agreed terms. Thank you for your business.</div>
   `;
+  const inner = isVoided
+    ? `<div class="watermark-wrap"><div class="watermark">Voided</div>${invoiceBody}</div>`
+    : invoiceBody;
   return docShell(`Invoice ${shortRef}`, inner);
 }
 
@@ -573,6 +609,7 @@ function buildInvoicePdfHtml(opts) {
  *   receiptDateStr?: string | null,
  *   paymentDateStr?: string | null,
  *   paymentMethod?: string | null,
+ *   paymentStatus?: string | null,
  *   paymentAmount: number,
  *   invoiceTotalStr?: string | null,
  *   outstandingInvoiceStr?: string | null,
@@ -654,6 +691,8 @@ function buildPaymentReceiptPdfHtml(opts) {
 
   const paymentDate = opts.paymentDateStr || opts.receiptDateStr || null;
   const paymentMethod = opts.paymentMethod && String(opts.paymentMethod).trim() !== "" ? String(opts.paymentMethod) : "—";
+  const paymentStatus = opts.paymentStatus && String(opts.paymentStatus).trim() !== "" ? String(opts.paymentStatus) : "posted";
+  const isVoidedPayment = paymentStatus.toLowerCase() === "voided";
   const amountReceived = formatMoneyWithCurrency(opts.paymentAmount, cc);
   const paymentSummarySection = `<div class="payment-highlight">
     <div class="amount-label">Amount Received</div>
@@ -696,9 +735,9 @@ function buildPaymentReceiptPdfHtml(opts) {
       ? String(opts.thankYouNote)
       : "Thank you for your payment. We appreciate your business.";
 
-  const inner = `
+  const receiptBody = `
   ${buildBrandHeaderHtml(business?.companyName, business?.companyTagline, business?.companyLogoDataUri)}
-  <h1>RECEIPT</h1>
+  ${buildDocumentHeaderHtml("Payment Receipt", projectName || opportunityName || null, [paymentDate ? `Paid: ${paymentDate}` : "", `Ref: …${shortRef}`])}
   ${paymentSummarySection}
   ${businessBlock}${clientBlock}
   ${descriptionSection}
@@ -710,6 +749,9 @@ function buildPaymentReceiptPdfHtml(opts) {
   </div>
   <div class="foot">Payment received with thanks.</div>
   `;
+  const inner = isVoidedPayment
+    ? `<div class="watermark-wrap"><div class="watermark">Voided</div>${receiptBody}</div>`
+    : receiptBody;
   return docShell(`Receipt ${shortRef}`, inner);
 }
 
@@ -725,31 +767,54 @@ function buildPaymentReceiptPdfHtml(opts) {
 function buildProjectProfitReportPdfHtml(opts) {
   const { companyName, companyTagline, companyLogoDataUri, generatedAtStr, rows, currencyCode } = opts;
   const cc = normalizeCurrencyCode(currencyCode ?? DEFAULT_CURRENCY_CODE);
-  const bodyRows = rows
-    .map((r) => {
-      const cls = r.profit < 0 ? "profit-neg" : r.profit > 0 ? "profit-pos" : "";
-      return `<tr>
+  const totals = rows.reduce(
+    (acc, r) => {
+      acc.collected += Number(r.collected) || 0;
+      acc.spent += Number(r.spent) || 0;
+      acc.profit += Number(r.profit) || 0;
+      return acc;
+    },
+    { collected: 0, spent: 0, profit: 0 }
+  );
+  const bodyRows = rows.length
+    ? rows
+        .map((r) => {
+          const cls = r.profit < 0 ? "profit-neg" : r.profit > 0 ? "profit-pos" : "";
+          return `<tr class="compact-row">
       <td>${escapeHtml(r.projectName)}</td>
-      <td class="num">${formatMoneyWithCurrency(r.collected, cc)}</td>
-      <td class="num">${formatMoneyWithCurrency(r.spent, cc)}</td>
-      <td class="num ${cls}">${formatMoneyWithCurrency(r.profit, cc)}</td>
+      <td class="num num-mono">${formatMoneyWithCurrency(r.collected, cc)}</td>
+      <td class="num num-mono">${formatMoneyWithCurrency(r.spent, cc)}</td>
+      <td class="num num-mono ${cls}">${formatMoneyWithCurrency(r.profit, cc)}</td>
     </tr>`;
-    })
-    .join("");
+        })
+        .join("")
+    : `<tr><td colspan="4" class="muted">No project finance rows for this period.</td></tr>`;
+  const totalProfitCls = totals.profit < 0 ? "profit-neg" : totals.profit > 0 ? "profit-pos" : "";
 
   const inner = `
   ${buildBrandHeaderHtml(companyName, companyTagline, companyLogoDataUri)}
-  <h1>Project profitability</h1>
-  ${companyName ? `<div class="company">${escapeHtml(companyName)}</div>` : ""}
-  <div class="meta"><div><strong>Report date:</strong> ${escapeHtml(generatedAtStr)}</div>
-  <div>Cash collected on invoices minus project expenses.</div></div>
-  <table>
+  ${buildDocumentHeaderHtml("Project Profitability Report", "Cash collected minus project expenses", [generatedAtStr, "Page 1 / 1"])}
+  <table class="report-table">
+    <colgroup>
+      <col style="width:46%" />
+      <col style="width:18%" />
+      <col style="width:18%" />
+      <col style="width:18%" />
+    </colgroup>
     <thead><tr>
       <th>Project</th><th class="num">Collected</th><th class="num">Expenses</th><th class="num">Profit</th>
     </tr></thead>
     <tbody>${bodyRows}</tbody>
+    <tfoot>
+      <tr>
+        <td class="sum-label">Total</td>
+        <td class="num num-mono">${formatMoneyWithCurrency(totals.collected, cc)}</td>
+        <td class="num num-mono">${formatMoneyWithCurrency(totals.spent, cc)}</td>
+        <td class="num num-mono ${totalProfitCls}">${formatMoneyWithCurrency(totals.profit, cc)}</td>
+      </tr>
+    </tfoot>
   </table>
-  <div class="foot">Generated by ServOps</div>
+  <div class="foot">Generated by Luna BMS</div>
   `;
   return docShell("Project profitability", inner);
 }

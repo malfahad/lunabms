@@ -13,6 +13,7 @@ import { colors, fonts, radius, space } from "../theme/tokens";
  *   thumbnailUri?: string | null,
  *   action?: { label: string; onPress: () => void } | null,
  *   secondaryAction?: { label: string; onPress: () => void } | null,
+ *   tertiaryAction?: { label: string; onPress: () => void } | null,
  * }} props
  */
 export function FinanceCard({
@@ -26,6 +27,7 @@ export function FinanceCard({
   thumbnailUri,
   action,
   secondaryAction,
+  tertiaryAction,
 }) {
   const amountColor =
     amountTone === "expense"
@@ -83,7 +85,7 @@ export function FinanceCard({
       </View>
       <Text style={[styles.amount, { color: amountColor }]}>{amount}</Text>
       {detail ? <Text style={styles.detail}>{detail}</Text> : null}
-      {action || secondaryAction ? (
+      {action || secondaryAction || tertiaryAction ? (
         <View style={styles.actionRow}>
           {action ? (
             <Pressable
@@ -103,6 +105,16 @@ export function FinanceCard({
               accessibilityLabel={secondaryAction.label}
             >
               <Text style={styles.actionBtnText}>{secondaryAction.label}</Text>
+            </Pressable>
+          ) : null}
+          {tertiaryAction ? (
+            <Pressable
+              onPress={tertiaryAction.onPress}
+              style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={tertiaryAction.label}
+            >
+              <Text style={styles.actionBtnText}>{tertiaryAction.label}</Text>
             </Pressable>
           ) : null}
         </View>

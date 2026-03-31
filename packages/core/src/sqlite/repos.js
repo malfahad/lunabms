@@ -13,6 +13,14 @@ function invoiceTotal(inv) {
   return Number(inv.sub_total) + Number(inv.tax_amount ?? inv.tax ?? 0);
 }
 
+function isVoidedInvoice(inv) {
+  return String(inv?.status || "").toLowerCase() === "voided";
+}
+
+function isVoidedPayment(payment) {
+  return String(payment?.status || "").toLowerCase() === "voided";
+}
+
 /**
  * @param {SqlEngine} engine
  */
@@ -330,6 +338,87 @@ function createRepos(engine) {
     },
     delete() {
       throw new AppendOnlyError("Post");
+    },
+  };
+
+  const postAttachments = {
+    insert(input) {
+      const id = input.id ?? newId();
+      const t = input.updated_at ?? now();
+      const createdAt = input.created_at ?? t;
+      engine.runSync(
+        `INSERT INTO post_attachments
+          (id, post_id, parent_type, parent_id, attachment_type, mime_type, file_name, file_size, storage_uri, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id,
+        input.post_id,
+        input.parent_type,
+        input.parent_id,
+        input.attachment_type,
+        input.mime_type ?? null,
+        input.file_name,
+        Number(input.file_size ?? 0),
+        input.storage_uri,
+        createdAt,
+        t
+      );
+      const row = postAttachments.get(id);
+      qUpsert("post_attachments", id, () => row);
+      return row;
+    },
+    get(id) {
+      return engine.getFirstSync("SELECT * FROM post_attachments WHERE id = ?", id);
+    },
+    listByPost(postId) {
+      return engine.getAllSync(
+        "SELECT * FROM post_attachments WHERE post_id = ? ORDER BY created_at ASC",
+        postId
+      );
+    },
+    listByParent(parentType, parentId) {
+      return engine.getAllSync(
+        "SELECT * FROM post_attachments WHERE parent_type = ? AND parent_id = ? ORDER BY created_at DESC",
+        parentType,
+        parentId
+      );
+    },
+    listAll() {
+      return engine.getAllSync("SELECT * FROM post_attachments ORDER BY created_at DESC");
+    },
+    totalSizeBytes() {
+      const row = engine.getFirstSync(
+        "SELECT COALESCE(SUM(file_size), 0) AS s FROM post_attachments"
+      );
+      return Number(row?.s ?? row?.S ?? 0);
+    },
+    update(id, patch, { expectedUpdatedAt }) {
+      const row = postAttachments.get(id);
+      if (!row) throw new LWWConflictError("Post attachment");
+      const t = now();
+      const res = engine.runSync(
+        `UPDATE post_attachments
+           SET post_id = ?, parent_type = ?, parent_id = ?, attachment_type = ?, mime_type = ?, file_name = ?, file_size = ?, storage_uri = ?, updated_at = ?
+         WHERE id = ? AND updated_at = ?`,
+        patch.post_id !== undefined ? patch.post_id : row.post_id,
+        patch.parent_type !== undefined ? patch.parent_type : row.parent_type,
+        patch.parent_id !== undefined ? patch.parent_id : row.parent_id,
+        patch.attachment_type !== undefined ? patch.attachment_type : row.attachment_type,
+        patch.mime_type !== undefined ? patch.mime_type : row.mime_type,
+        patch.file_name !== undefined ? patch.file_name : row.file_name,
+        patch.file_size !== undefined ? Number(patch.file_size) : Number(row.file_size),
+        patch.storage_uri !== undefined ? patch.storage_uri : row.storage_uri,
+        t,
+        id,
+        expectedUpdatedAt
+      );
+      assertChanged(res, "Post attachment");
+      const updated = postAttachments.get(id);
+      qUpsert("post_attachments", id, () => updated);
+      return updated;
+    },
+    delete(id) {
+      qDel("post_attachments", id);
+      engine.runSync("DELETE FROM post_attachments WHERE id = ?", id);
     },
   };
 
@@ -792,6 +881,18 @@ function createRepos(engine) {
     update(id, patch, { expectedUpdatedAt }) {
       const row = invoices.get(id);
       if (!row) throw new LWWConflictError("Invoice");
+      const nextStatus = patch.status !== undefined ? String(patch.status).toLowerCase() : String(row.status || "").toLowerCase();
+      const wasVoided = isVoidedInvoice(row);
+      if (!wasVoided && nextStatus === "voided") {
+        const paidRow = engine.getFirstSync(
+          "SELECT COALESCE(SUM(amount), 0) AS s FROM payments WHERE invoice_id = ? AND LOWER(COALESCE(status, 'posted')) != 'voided'",
+          id
+        );
+        const paid = Number(paidRow?.s ?? paidRow?.S ?? 0);
+        if (paid > 0.0001) {
+          throw new Error("Cannot void invoice with recorded payments.");
+        }
+      }
       const t = now();
       const sub = patch.sub_total != null ? Number(patch.sub_total) : Number(row.sub_total);
       const taxAmt = patch.tax_amount != null ? Number(patch.tax_amount) : patch.tax != null ? Number(patch.tax) : Number(row.tax_amount ?? row.tax ?? 0);
@@ -834,9 +935,10 @@ function createRepos(engine) {
   function invoiceAmountDue(invoiceId) {
     const inv = invoices.get(invoiceId);
     if (!inv) return 0;
+    if (isVoidedInvoice(inv)) return 0;
     const total = invoiceTotal(inv);
     const paidRow = engine.getFirstSync(
-      "SELECT COALESCE(SUM(amount), 0) AS s FROM payments WHERE invoice_id = ?",
+      "SELECT COALESCE(SUM(amount), 0) AS s FROM payments WHERE invoice_id = ? AND LOWER(COALESCE(status, 'posted')) != 'voided'",
       invoiceId
     );
     const paid = Number(paidRow?.s ?? paidRow?.S ?? 0);
@@ -857,6 +959,7 @@ function createRepos(engine) {
     if (!p) return 0;
     let sum = 0;
     for (const inv of invoices.listByProject(projectId)) {
+      if (isVoidedInvoice(inv)) continue;
       sum += invoiceAmountDue(inv.id);
     }
     sum = Math.round(sum * 100) / 100;
@@ -1062,14 +1165,30 @@ function createRepos(engine) {
 
   const payments = {
     insert(input) {
+      const invoiceRow = invoices.get(input.invoice_id);
+      if (invoiceRow && isVoidedInvoice(invoiceRow)) {
+        throw new Error("Cannot record payment on a voided invoice.");
+      }
+      const amount = Number(input.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error("Payment amount must be greater than zero.");
+      }
+      const dueBefore = Math.max(0, invoiceAmountDue(input.invoice_id));
+      if (dueBefore <= 0.001) {
+        throw new Error("Invoice is already fully paid.");
+      }
+      if (amount > dueBefore + 0.001) {
+        throw new Error(`Payment amount exceeds outstanding invoice balance (${formatMoneyAmount(dueBefore)}).`);
+      }
       const id = input.id ?? newId();
       const ts = input.paid_at ?? input.created_at ?? now();
       engine.runSync(
-        "INSERT INTO payments (id, invoice_id, amount, method, created_at, paid_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO payments (id, invoice_id, amount, method, status, created_at, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         id,
         input.invoice_id,
-        input.amount,
+        amount,
         input.method,
+        input.status ?? "posted",
         ts,
         ts
       );
@@ -1101,17 +1220,48 @@ function createRepos(engine) {
     get(id) {
       return engine.getFirstSync("SELECT * FROM payments WHERE id = ?", id);
     },
-    listByInvoice(invoiceId) {
+    listByInvoice(invoiceId, opts = {}) {
+      const includeVoided = opts.includeVoided === true;
+      if (includeVoided) {
+        return engine.getAllSync(
+          "SELECT * FROM payments WHERE invoice_id = ? ORDER BY COALESCE(paid_at, created_at) ASC",
+          invoiceId
+        );
+      }
       return engine.getAllSync(
-        "SELECT * FROM payments WHERE invoice_id = ? ORDER BY COALESCE(paid_at, created_at) ASC",
+        "SELECT * FROM payments WHERE invoice_id = ? AND LOWER(COALESCE(status, 'posted')) != 'voided' ORDER BY COALESCE(paid_at, created_at) ASC",
         invoiceId
       );
     },
     list() {
       return engine.getAllSync("SELECT * FROM payments ORDER BY COALESCE(paid_at, created_at) DESC");
     },
-    update() {
-      throw new AppendOnlyError("Payment");
+    update(id, patch) {
+      const row = payments.get(id);
+      if (!row) throw new LWWConflictError("Payment");
+      const nextStatus =
+        patch.status !== undefined
+          ? String(patch.status || "posted").toLowerCase()
+          : String(row.status || "posted").toLowerCase();
+      const res = engine.runSync(
+        "UPDATE payments SET status = ? WHERE id = ?",
+        nextStatus,
+        id
+      );
+      assertChanged(res, "Payment");
+      const updated = payments.get(id);
+      qUpsert("payments", id, () => updated);
+      const freshInvoice = invoices.get(updated.invoice_id);
+      if (freshInvoice) {
+        const due = invoiceAmountDue(freshInvoice.id);
+        const currentStatus = String(freshInvoice.status || "").toLowerCase();
+        if (due < 0.01 && currentStatus !== "paid" && currentStatus !== "voided") {
+          invoices.update(freshInvoice.id, { status: "paid" }, { expectedUpdatedAt: freshInvoice.updated_at });
+        } else if (due >= 0.01 && currentStatus === "paid") {
+          invoices.update(freshInvoice.id, { status: "issued" }, { expectedUpdatedAt: freshInvoice.updated_at });
+        }
+      }
+      return updated;
     },
     delete() {
       throw new AppendOnlyError("Payment");
@@ -1153,6 +1303,7 @@ function createRepos(engine) {
       if (!ret) throw new Error("Client deposit not found");
       const inv = invoices.get(payload.invoice_id);
       if (!inv) throw new Error("Invoice not found");
+      if (isVoidedInvoice(inv)) throw new Error("Cannot apply client deposit to a voided invoice");
       const amt = Number(payload.amount_applied);
       if (amt <= 0) throw new Error("Client deposit apply amount must be positive");
       if (amt > Number(ret.balance) + 1e-9) throw new Error("Client deposit apply amount exceeds balance");
@@ -1256,7 +1407,9 @@ function createRepos(engine) {
       return computeProjectBalanceDueNet(projectId);
     },
     summary() {
-      const invoicesRows = engine.getAllSync("SELECT * FROM invoices");
+      const invoicesRows = engine
+        .getAllSync("SELECT * FROM invoices")
+        .filter((inv) => !isVoidedInvoice(inv));
       const projectIds = new Set(invoicesRows.map((i) => i.project_id));
       let outstanding = 0;
       for (const pid of projectIds) {
@@ -1266,11 +1419,15 @@ function createRepos(engine) {
       const monthStart = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
       const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
       const payRows = engine.getAllSync(
-        "SELECT amount FROM payments WHERE COALESCE(paid_at, created_at) >= ? AND COALESCE(paid_at, created_at) <= ?",
+        "SELECT invoice_id, amount, status, COALESCE(paid_at, created_at) AS ts FROM payments WHERE COALESCE(paid_at, created_at) >= ? AND COALESCE(paid_at, created_at) <= ?",
         monthStart,
         monthEnd
       );
-      const monthlyCollected = payRows.reduce((a, r) => a + Number(r.amount), 0);
+      const monthlyCollected = payRows.reduce((a, r) => {
+        const inv = invoices.get(r.invoice_id);
+        if (!inv || isVoidedInvoice(inv) || isVoidedPayment(r)) return a;
+        return a + Number(r.amount);
+      }, 0);
       let monthlyExpenses = 0;
       for (const e of expenses.list()) {
         const ts = Number(e.expense_date ?? e.updated_at ?? 0);
@@ -1299,6 +1456,7 @@ function createRepos(engine) {
       if (!p) return null;
       let collected = 0;
       for (const inv of invoices.listByProject(projectId)) {
+        if (isVoidedInvoice(inv)) continue;
         for (const pay of payments.listByInvoice(inv.id)) {
           collected += Number(pay.amount);
         }
@@ -1401,6 +1559,7 @@ function createRepos(engine) {
     notifications,
     finance,
     posts,
+    postAttachments,
     syncOutbound,
     appSettings,
   };

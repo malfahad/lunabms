@@ -10,7 +10,7 @@
 
 **Shipped today (covers M0–M12 settings & invoice reminders, M11 automations, M10 sync queue & media compression, M9 retainers depth, M8 expenses & suppliers, M7 invoicing, M6 Finance cards, M5 Updates, M4 projects/tasks, M3 Flow A, plus M1–M2 breadth):**
 
-- **Monorepo & platforms:** `@servops/core` + Expo FieldOps; **expo-sqlite** on native; **sql.js** on web (`DatabaseContext.web.js`); same migrations and `createRepos` everywhere; `PRAGMA foreign_keys = ON`; Node tests via sql.js.
+- **Monorepo & platforms:** `@lunabms/core` + Expo FieldOps; **expo-sqlite** on native; **sql.js** on web (`DatabaseContext.web.js`); same migrations and `createRepos` everywhere; `PRAGMA foreign_keys = ON`; Node tests via sql.js.
 - **Schema:** SQLite migrations **through v9** — [ERD §6](app_design.md#6-data-layer-plan-schema--persistence) (v3–v8 as before); **v9** **`app_settings`** (company profile + invoice defaults). **`appSettings`** repo; **`buildInvoiceReminderMessage`** for WhatsApp overdue flows.
 - **IA (M2):** Bottom tabs and drawer routes with FABs; **responsive / collapsible drawer** at wide viewports; **empty lists** use **SVG illustrations**, supporting copy, and a **primary CTA** (not plain “No … yet” only).
 - **Pipeline & Flow A (M3):** Stack **`pipeline/index`** + **`pipeline/[id]`**; quotations and **Accept → project**; alert can **deep-link to `projects/[id]`** for the new project.

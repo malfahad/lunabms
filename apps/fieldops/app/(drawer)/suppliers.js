@@ -13,7 +13,7 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
-import { LWWConflictError, formatMoney } from "@servops/core";
+import { LWWConflictError, formatMoney } from "@lunabms/core";
 import { FormField } from "../../components/FormField";
 import { ListEmptyState } from "../../components/ListEmptyState";
 import { PrimaryButton } from "../../components/PrimaryButton";

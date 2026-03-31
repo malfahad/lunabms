@@ -136,6 +136,23 @@ const ENTITY_META = {
       "created_at",
     ],
   },
+  post_attachments: {
+    table: "post_attachments",
+    mode: "mutable",
+    columns: [
+      "id",
+      "post_id",
+      "parent_type",
+      "parent_id",
+      "attachment_type",
+      "mime_type",
+      "file_name",
+      "file_size",
+      "storage_uri",
+      "created_at",
+      "updated_at",
+    ],
+  },
   retainer_applications: {
     table: "retainer_applications",
     mode: "append",

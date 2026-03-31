@@ -1,6 +1,6 @@
-# Servops — Field Operations Platform
+# Luna BMS — Field Operations Platform
 
-JavaScript **monorepo**: shared `@servops/core` plus **Expo (SDK 52)** app **@servops/fieldops** for **Android, iOS, and Web** from one codebase. **Windows, Linux, and macOS** use the same `npm` scripts for install, tests, and web export.
+JavaScript **monorepo**: shared `@lunabms/core` plus **Expo (SDK 52)** app **@lunabms/fieldops** for **Android, iOS, and Web** from one codebase. **Windows, Linux, and macOS** use the same `npm` scripts for install, tests, and web export.
 
 ## Requirements
 
@@ -12,8 +12,8 @@ JavaScript **monorepo**: shared `@servops/core` plus **Expo (SDK 52)** app **@se
 ## Setup (any OS)
 
 ```bash
-git clone <repo-url> servops
-cd servops
+git clone <repo-url> luna-bms
+cd luna-bms
 npm install
 ```
 
@@ -26,9 +26,9 @@ Path separators and line endings: use forward slashes in docs; `.gitattributes` 
 npm run fieldops:start
 
 # Or directly
-npm run web -w @servops/fieldops
-npm run android -w @servops/fieldops
-npm run ios -w @servops/fieldops
+npm run web -w @lunabms/fieldops
+npm run android -w @lunabms/fieldops
+npm run ios -w @lunabms/fieldops
 ```
 
 ## Dockerized Django API (multi-tenant sync backend)
@@ -59,12 +59,12 @@ The backend keeps per-tenant incremental sync history and applies mutable entiti
 
 ## Milestone 1 — local data model
 
-- **Single SQLite schema** in `@servops/core` (`src/sqlite/migrations.js`): `clients`, `opportunities`, `projects`, `tasks`, `invoices`, `payments`, `retainers`, `posts` (+ `schema_migrations`).
+- **Single SQLite schema** in `@lunabms/core` (`src/sqlite/migrations.js`): `clients`, `opportunities`, `projects`, `tasks`, `invoices`, `payments`, `retainers`, `posts` (+ `schema_migrations`).
 - **`PRAGMA foreign_keys = ON`** applied in `runMigrations` so cascades match the design.
 - **Repositories** (`createRepos`): LWW updates via `expectedUpdatedAt` on mutable rows; **payments** and **posts** are **append-only** (updates throw `AppendOnlyError`).
 - **Platform 1:** automated CRUD + relationship tests using **sql.js** (Node).
 - **Platform 2:** **expo-sqlite** on **iOS / Android** — same migrations and repos; lists bind to **Pipeline / Projects / Finance / Updates / Retainers** screens (`DatabaseProvider` in `app/_layout.js`).
-- **Web:** `expo-sqlite` has no web native module (`ExpoSQLite`). The app uses **`DatabaseContext.web.js`**: **sql.js** (WASM) + the same `runMigrations` / `createRepos` from `@servops/core`. WASM may load from the bundled asset or sql.js CDN depending on the build.
+- **Web:** `expo-sqlite` has no web native module (`ExpoSQLite`). The app uses **`DatabaseContext.web.js`**: **sql.js** (WASM) + the same `runMigrations` / `createRepos` from `@lunabms/core`. WASM may load from the bundled asset or sql.js CDN depending on the build.
 
 ## Milestone 2 — navigation & IA
 
@@ -117,7 +117,7 @@ The backend keeps per-tenant incremental sync history and applies mutable entiti
 
 ## Milestone 10 — Sync queue & receipt compression
 
-- **Schema v8:** **`sync_outbound_queue`**; LWW upserts coalesce to one pending row per entity+id; **append** rows for **posts**, **payments**, **retainer applications** with **`flags_json.appendOnly`**. **`flushSyncOutboundQueueStub`** (exported from **`@servops/core`**) processes pending rows until a real server sync exists.
+- **Schema v8:** **`sync_outbound_queue`**; LWW upserts coalesce to one pending row per entity+id; **append** rows for **posts**, **payments**, **retainer applications** with **`flags_json.appendOnly`**. **`flushSyncOutboundQueueStub`** (exported from **`@lunabms/core`**) processes pending rows until a real server sync exists.
 - **FieldOps → Settings:** outbound **pending/failed** counts and **Simulate sync push**. **`SYNC_RECONCILIATION`** in core documents server-side LWW vs append-only rules; **web** SQLite is **IndexedDB**-backed (see `DatabaseContext.web.js`).
 - **Native expense receipts:** **`expo-image-manipulator`** (resize + JPEG) before copy to **`expense-receipts/`**; **web** unchanged (picker URI).
 
@@ -129,14 +129,14 @@ The backend keeps per-tenant incremental sync history and applies mutable entiti
 ## Milestone 12 — Settings & invoice reminders
 
 - **Schema v9:** **`app_settings`**; **`repos.appSettings`** (`get` / `set` / **`getSnapshot`**). **Settings** screen: company profile + default **Include VAT** + **due in days** for new invoices.
-- **Finance:** **WhatsApp reminder** on **overdue** unpaid invoice cards; **`buildInvoiceReminderMessage`** from **`@servops/core`**; PDF line is a placeholder until invoice PDFs exist.
+- **Finance:** **WhatsApp reminder** on **overdue** unpaid invoice cards; **`buildInvoiceReminderMessage`** from **`@lunabms/core`**; PDF line is a placeholder until invoice PDFs exist.
 - **Projects:** **Assign** links a **Team** worker to a task (`task_workers`) for overdue local notifications.
 
 ## Scripts
 
 | Command | Purpose |
 |--------|---------|
-| `npm test` | Workspace tests (`@servops/core`, SQLite / milestone regression tests) |
+| `npm test` | Workspace tests (`@lunabms/core`, SQLite / milestone regression tests) |
 | `npm run ci` | Tests + static web export |
 | `npm run fieldops:export-web` | Production-shaped web bundle → `apps/fieldops/dist` |
 

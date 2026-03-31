@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { FormField } from "../../../components/FormField";
@@ -9,8 +9,25 @@ import { PrimaryButton } from "../../../components/PrimaryButton";
 import { ScreenFab } from "../../../components/ScreenFab";
 import { SimpleModal } from "../../../components/SimpleModal";
 import { useRepos } from "../../../context/DatabaseContext";
+import {
+  MAX_ATTACH_BATCH_BYTES,
+  MAX_ATTACH_TOTAL_BYTES,
+  computeDraftBytes,
+  deleteAttachmentFile,
+  describeAttachmentSize,
+  downloadAttachment,
+  openAttachment,
+  pickDocumentAttachments,
+  pickMediaAttachments,
+  saveAttachmentToStorage,
+} from "../../../lib/postAttachments";
+import { hydrateLibraryFromPostAttachments } from "../../../lib/webMediaLibrary";
 import { sharedStyles } from "../../../theme/styles";
 import { colors, fonts, space } from "../../../theme/tokens";
+
+function localId(prefix = "id") {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export default function UpdatesScreen() {
   const router = useRouter();
@@ -27,6 +44,13 @@ export default function UpdatesScreen() {
   const [feedScope, setFeedScope] = useState("all");
   const [filterProjectId, setFilterProjectId] = useState(null);
   const [filterOppId, setFilterOppId] = useState(null);
+  const [draftAttachments, setDraftAttachments] = useState([]);
+  const [posting, setPosting] = useState(false);
+  const [allAttachments, setAllAttachments] = useState([]);
+  const mediaUploadUrl = useMemo(() => {
+    const base = "http://localhost:8000";
+    return `${base}/api/media/upload/`;
+  }, []);
 
   const projectById = useMemo(() => Object.fromEntries(projs.map((p) => [p.id, p])), [projs]);
   const oppById = useMemo(() => Object.fromEntries(opps.map((o) => [o.id, o])), [opps]);
@@ -36,6 +60,7 @@ export default function UpdatesScreen() {
     setOpps(repos.opportunities.list());
     setProjs(repos.projects.list());
     setWorkers(repos.workers.list());
+    setAllAttachments(repos.postAttachments?.listAll?.() || []);
   }, [repos]);
 
   const reloadPosts = useCallback(() => {
@@ -56,7 +81,24 @@ export default function UpdatesScreen() {
     reloadPosts();
   }, [loadParents, reloadPosts]);
 
-  useFocusEffect(useCallback(() => refresh(), [refresh]));
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        if (Platform.OS === "web") {
+          try {
+            await hydrateLibraryFromPostAttachments(repos.postAttachments?.listAll?.() || []);
+          } catch {
+            // best effort on view enter; avoid blocking UI.
+          }
+        }
+        if (!cancelled) refresh();
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [refresh, repos])
+  );
 
   useEffect(() => {
     reloadPosts();
@@ -67,21 +109,81 @@ export default function UpdatesScreen() {
     setParentType("project");
     setParentId(null);
     setAuthorWorkerId(null);
+    setDraftAttachments([]);
     loadParents();
     setModal(true);
   }
 
-  function save() {
-    if (!parentId || !body.trim()) return;
-    repos.posts.insert({
-      parent_type: parentType,
-      parent_id: parentId,
-      type: "text",
-      body: body.trim(),
-      author_id: authorWorkerId,
-    });
-    setModal(false);
-    refresh();
+  async function addDrafts(getter) {
+    try {
+      const picked = await getter();
+      if (!picked.length) return;
+      const pickedBytes = await computeDraftBytes(picked);
+      const currentDraftBytes = await computeDraftBytes(draftAttachments);
+      const batchTotal = currentDraftBytes + pickedBytes;
+      if (batchTotal > MAX_ATTACH_BATCH_BYTES) {
+        Alert.alert("Attachment limit", "You can attach up to 100 MB per post.");
+        return;
+      }
+      const used = Number(repos.postAttachments?.totalSizeBytes?.() || 0);
+      if (used + batchTotal > MAX_ATTACH_TOTAL_BYTES) {
+        Alert.alert("Storage full", "Attachment storage limit is 5 GB. Delete files from Library to continue.");
+        return;
+      }
+      setDraftAttachments((rows) => [...rows, ...picked]);
+    } catch (e) {
+      Alert.alert("Attachment error", String(e?.message || e));
+    }
+  }
+
+  async function save() {
+    if (!parentId || !body.trim() || posting) return;
+    setPosting(true);
+    try {
+      const post = repos.posts.insert({
+        parent_type: parentType,
+        parent_id: parentId,
+        type: "text",
+        body: body.trim(),
+        author_id: authorWorkerId,
+      });
+      for (const draft of draftAttachments) {
+        const attachmentId = localId("att");
+        const saved = await saveAttachmentToStorage(draft, {
+          uploadUrl: mediaUploadUrl,
+          accessToken: String(repos.appSettings.get("sync_access_token") || ""),
+          attachmentId,
+        });
+        repos.postAttachments.insert({
+          id: attachmentId,
+          post_id: post.id,
+          parent_type: parentType,
+          parent_id: parentId,
+          attachment_type: saved.attachmentType,
+          mime_type: saved.mimeType,
+          file_name: saved.fileName,
+          file_size: saved.fileSize,
+          storage_uri: saved.storageUri,
+        });
+      }
+      setModal(false);
+      setDraftAttachments([]);
+      refresh();
+    } catch (e) {
+      Alert.alert("Unable to post", String(e?.message || e));
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  async function removeAttachment(att) {
+    try {
+      await deleteAttachmentFile(att.storage_uri);
+      repos.postAttachments.delete(att.id);
+      refresh();
+    } catch (e) {
+      Alert.alert("Delete failed", String(e?.message || e));
+    }
   }
 
   function parentLabelForPost(p) {
@@ -112,6 +214,14 @@ export default function UpdatesScreen() {
   }
 
   const parents = parentType === "project" ? projs : opps;
+  const attachmentsByPost = useMemo(() => {
+    const map = {};
+    for (const a of allAttachments) {
+      if (!map[a.post_id]) map[a.post_id] = [];
+      map[a.post_id].push(a);
+    }
+    return map;
+  }, [allAttachments]);
 
   const emptyForScope =
     feedScope === "project" && !filterProjectId
@@ -236,6 +346,10 @@ export default function UpdatesScreen() {
               authorName={authorNameForPost(item)}
               parentLabel={parentLabelForPost(item)}
               onPressParent={() => openPostParent(item)}
+              attachments={attachmentsByPost[item.id] || []}
+              onPressAttachment={(att) => openAttachment(att.storage_uri)}
+              onDownloadAttachment={(att) => downloadAttachment(att.storage_uri, att.file_name)}
+              onDeleteAttachment={(att) => removeAttachment(att)}
             />
           )}
           contentContainerStyle={styles.listContent}
@@ -318,7 +432,32 @@ export default function UpdatesScreen() {
           <Text style={styles.hintItalic}>Add team members in the drawer to attribute posts.</Text>
         ) : null}
         <FormField label="Message *" value={body} onChangeText={setBody} placeholder="Update…" multiline />
-        <PrimaryButton title="Post" onPress={save} disabled={!parentId || !body.trim()} />
+        <Text style={sharedStyles.label}>Attachments</Text>
+        <View style={sharedStyles.chipRow}>
+          <Pressable style={[sharedStyles.chip, sharedStyles.chipActive]} onPress={() => void addDrafts(pickMediaAttachments)}>
+            <Text style={[sharedStyles.chipText, sharedStyles.chipTextActive]}>+ Media</Text>
+          </Pressable>
+          <Pressable style={[sharedStyles.chip, sharedStyles.chipActive]} onPress={() => void addDrafts(pickDocumentAttachments)}>
+            <Text style={[sharedStyles.chipText, sharedStyles.chipTextActive]}>+ Document</Text>
+          </Pressable>
+        </View>
+        {draftAttachments.length ? (
+          <View style={styles.attachList}>
+            {draftAttachments.map((a, idx) => (
+              <View key={`${a.uri}-${idx}`} style={styles.attachRow}>
+                <Text style={styles.attachText} numberOfLines={1}>
+                  {a.fileName} · {describeAttachmentSize(a.fileSize)}
+                </Text>
+                <Pressable onPress={() => setDraftAttachments((rows) => rows.filter((_, i) => i !== idx))}>
+                  <Text style={styles.removeTxt}>Remove</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.hintItalic}>No attachments selected.</Text>
+        )}
+        <PrimaryButton title={posting ? "Posting..." : "Post"} onPress={() => void save()} disabled={!parentId || !body.trim() || posting} />
       </SimpleModal>
     </View>
   );
@@ -386,4 +525,19 @@ const styles = StyleSheet.create({
     color: colors.onSecondaryVariant,
     fontStyle: "italic",
   },
+  attachList: {
+    marginBottom: space.md,
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: 12,
+    padding: space.sm,
+  },
+  attachRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+    gap: space.sm,
+  },
+  attachText: { flex: 1, fontSize: 13, fontFamily: fonts.body, color: colors.onBackground },
+  removeTxt: { fontSize: 12, fontFamily: fonts.bodySemi, color: colors.financeExpense },
 });

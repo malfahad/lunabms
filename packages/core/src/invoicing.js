@@ -45,7 +45,7 @@ function buildReceiptStubText(payment, invoice, project, currencyCode = DEFAULT_
   const invBit = invoice ? `Invoice …${String(invoice.id).slice(0, 8)}\n` : "";
   const projBit = project?.name ? `Project: ${project.name}\n` : "";
   return (
-    `ServOps — Payment receipt\n` +
+    `Luna BMS — Payment receipt\n` +
     `Receipt ref: …${String(payment.id).slice(0, 8)}\n` +
     invBit +
     projBit +

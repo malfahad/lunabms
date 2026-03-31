@@ -57,14 +57,14 @@ def _send_verification_email(user, tenant):
     else:
         verify_url = f"uid={uid} token={token}"
     send_mail(
-        subject="Verify your ServOps account email",
+        subject="Verify your Luna BMS account email",
         message=(
             f"Hi,\n\n"
             f"Please verify your email for {tenant.business_name} ({tenant.business_username}).\n"
             f"Use this link/token: {verify_url}\n\n"
             f"If you did not create this account, ignore this email."
         ),
-        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@servops.com"),
+        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@lunabms.com"),
         recipient_list=[user.email],
         fail_silently=False,
     )
@@ -89,7 +89,10 @@ def tenant_from_business_username(value: str):
     business_username = slugify((value or "").strip())
     if not business_username:
         raise Http404("Tenant not found")
-    return Tenant.objects.get(business_username=business_username)
+    tenant = Tenant.objects.filter(business_username=business_username).first()
+    if not tenant:
+        raise Http404("Tenant not found")
+    return tenant
 
 
 def resolve_tenant_for_user(user, business_name: str):
@@ -229,7 +232,7 @@ class LoginView(APIView):
                 {
                     "gate": "license_expired",
                     "detail": "License is expired.",
-                    "cta": "Contact support support@servops.com",
+                    "cta": "Contact support@lunabms.com",
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
@@ -280,7 +283,7 @@ class VerifyEmailView(APIView):
                 {
                     "gate": "license_expired",
                     "detail": "License is expired.",
-                    "cta": "Contact support support@servops.com",
+                    "cta": "Contact support@lunabms.com",
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
@@ -430,6 +433,99 @@ class TenantLogoView(APIView):
             raise Http404("Logo file not found")
         fh = default_storage.open(tenant.logo_path, "rb")
         content_type, _ = mimetypes.guess_type(tenant.logo_path)
+        resp = FileResponse(fh, content_type=content_type or "application/octet-stream")
+        resp["Cache-Control"] = "public, max-age=3600"
+        return resp
+
+
+class MediaUploadView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        tenant = resolve_tenant_from_token(request, request.user)
+        upload = request.FILES.get("file") or request.FILES.get("attachment")
+        if not upload:
+            return Response({"detail": "file is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if upload.size > 100 * 1024 * 1024:
+            return Response(
+                {"detail": "Attachment file must be 100MB or smaller."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        content_type = (upload.content_type or "").lower().strip()
+        ext = Path(upload.name or "").suffix.lower().strip()
+        if not ext:
+            guessed = mimetypes.guess_extension(content_type) or ".bin"
+            ext = ".jpg" if guessed == ".jpe" else guessed
+
+        is_image = content_type.startswith("image/")
+        is_video = content_type.startswith("video/")
+        is_document = content_type.startswith("application/") or content_type.startswith("text/")
+        if not (is_image or is_video or is_document):
+            # Some clients omit content type for files. Allow by extension fallback.
+            fallback_ok_ext = {
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".gif",
+                ".webp",
+                ".heic",
+                ".mp4",
+                ".mov",
+                ".m4v",
+                ".webm",
+                ".avi",
+                ".pdf",
+                ".doc",
+                ".docx",
+                ".xls",
+                ".xlsx",
+                ".ppt",
+                ".pptx",
+                ".txt",
+                ".csv",
+                ".zip",
+            }
+            if ext not in fallback_ok_ext:
+                return Response(
+                    {"detail": "Unsupported attachment content type."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            is_document = not (ext in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".mp4", ".mov", ".m4v", ".webm", ".avi"})
+            is_image = ext in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"}
+            is_video = ext in {".mp4", ".mov", ".m4v", ".webm", ".avi"}
+
+        attachment_type = "image" if is_image else "video" if is_video else "document"
+        rel = f"attachments/{tenant.tenant_id}/{uuid4().hex}{ext}"
+        saved_path = default_storage.save(rel, upload)
+        file_name = Path(saved_path).name
+        media_url = request.build_absolute_uri(f"/api/media/file/{tenant.tenant_id}/{file_name}/")
+        return Response(
+            {
+                "tenant_id": tenant.tenant_id,
+                "attachment_type": attachment_type,
+                "mime_type": content_type,
+                "file_name": upload.name or file_name,
+                "file_size": upload.size,
+                "media_url": media_url,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MediaFileView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, tenant_id, file_name):
+        safe_name = Path(file_name or "").name
+        if not safe_name:
+            raise Http404("Media file not found")
+        rel = f"attachments/{tenant_id}/{safe_name}"
+        if not default_storage.exists(rel):
+            raise Http404("Media file not found")
+        fh = default_storage.open(rel, "rb")
+        content_type, _ = mimetypes.guess_type(rel)
         resp = FileResponse(fh, content_type=content_type or "application/octet-stream")
         resp["Cache-Control"] = "public, max-age=3600"
         return resp

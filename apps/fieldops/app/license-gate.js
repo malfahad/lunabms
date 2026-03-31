@@ -32,7 +32,7 @@ export default function LicenseGateScreen() {
         {detail || "Your business license has expired. Renew your Luna BMS license to continue using the app."}
       </Text>
       <Text style={styles.detail}>Expires at: {formatExpiry(expiresAt)}</Text>
-      <Text style={styles.detail}>{cta || "Contact support@servops.com"}</Text>
+      <Text style={styles.detail}>{cta || "Contact support@lunabms.com"}</Text>
       <View style={styles.actions}>
         <PrimaryButton title="Logout" onPress={onLogout} variant="secondary" />
       </View>

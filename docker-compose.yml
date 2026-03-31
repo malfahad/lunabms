@@ -9,7 +9,7 @@ services:
       - "8000:8000"
     environment:
       # Keep DB host pinned to docker network service name.
-      DATABASE_URL: "postgresql://servops:servops@db:5432/servops"
+      DATABASE_URL: "postgresql://lunabms:lunabms@db:5432/lunabms"
     depends_on:
       db:
         condition: service_healthy
@@ -21,16 +21,16 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: servops
-      POSTGRES_USER: servops
-      POSTGRES_PASSWORD: servops
+      POSTGRES_DB: lunabms
+      POSTGRES_USER: lunabms
+      POSTGRES_PASSWORD: lunabms
     volumes:
-      - servops_pg_data:/var/lib/postgresql/data
+      - lunabms_pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U servops -d servops"]
+      test: ["CMD-SHELL", "pg_isready -U lunabms -d lunabms"]
       interval: 2s
       timeout: 5s
       retries: 20
 
 volumes:
-  servops_pg_data:
+  lunabms_pg_data:

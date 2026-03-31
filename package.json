@@ -1,5 +1,5 @@
 {
-  "name": "servops",
+  "name": "luna-bms",
   "private": true,
   "workspaces": [
     "packages/*",
@@ -12,11 +12,11 @@
     "ci": "npm test && npm run fieldops:export-web",
     "backend:up": "docker compose --env-file .env up --build",
     "backend:down": "docker compose --env-file .env down",
-    "fieldops:start": "npm run start -w @servops/fieldops",
-    "fieldops:web": "npm run web -w @servops/fieldops",
-    "fieldops:android": "npm run android -w @servops/fieldops",
-    "fieldops:ios": "npm run ios -w @servops/fieldops",
-    "fieldops:export-web": "npm run export:web -w @servops/fieldops"
+    "fieldops:start": "npm run start -w @lunabms/fieldops",
+    "fieldops:web": "npm run web -w @lunabms/fieldops",
+    "fieldops:android": "npm run android -w @lunabms/fieldops",
+    "fieldops:ios": "npm run ios -w @lunabms/fieldops",
+    "fieldops:export-web": "npm run export:web -w @lunabms/fieldops"
   },
   "engines": {
     "node": ">=18.18.0"

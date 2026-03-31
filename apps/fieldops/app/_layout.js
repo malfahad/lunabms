@@ -9,6 +9,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { OverdueNotificationBridge } from "../components/OverdueNotificationBridge";
 import { DatabaseProvider, useDatabase } from "../context/DatabaseContext";
+import { registerMediaServiceWorker } from "../lib/registerMediaServiceWorker";
 import { useAppFonts } from "../theme/fonts";
 import { navigationTheme } from "../theme/navigationTheme";
 
@@ -28,6 +29,10 @@ export default function RootLayout() {
   useEffect(() => {
     if (error) throw error;
   }, [error]);
+
+  useEffect(() => {
+    registerMediaServiceWorker();
+  }, []);
 
   const onLayoutRootView = useCallback(async () => {
     if (loaded) {

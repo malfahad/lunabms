@@ -23,6 +23,7 @@ const ROUTE_ICONS = {
   team: "group",
   retainers: "account-balance-wallet",
   reports: "assessment",
+  library: "perm-media",
   settings: "settings",
 };
 

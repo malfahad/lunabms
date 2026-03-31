@@ -10,7 +10,7 @@ import { ScreenFab } from "../../../../components/ScreenFab";
 import { SimpleModal } from "../../../../components/SimpleModal";
 import { useRepos } from "../../../../context/DatabaseContext";
 import { colors, fonts, space } from "../../../../theme/tokens";
-import { formatMoney } from "@servops/core";
+import { formatMoney } from "@lunabms/core";
 
 export default function ProjectsScreen() {
   const router = useRouter();

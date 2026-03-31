@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as ImagePicker from "expo-image-picker";
-import { Alert, FlatList, Image, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Image, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -20,7 +20,7 @@ import {
   invoiceTotal,
   UGANDA_VAT_RATE,
   formatMoney,
-} from "@servops/core";
+} from "@lunabms/core";
 import { sharePdfFromHtml } from "../../../lib/sharePdf";
 import { useRepos } from "../../../context/DatabaseContext";
 import { persistExpenseReceiptImage } from "../../../lib/persistReceipt";
@@ -28,6 +28,39 @@ import { loadImageAsDataUri } from "../../../lib/pdfImageData";
 import { QUOTATION_STATUS } from "../../../constants/quotation";
 import { sharedStyles } from "../../../theme/styles";
 import { colors, fonts, radius, space } from "../../../theme/tokens";
+
+const PAYMENT_METHODS_KEY = "payment_methods";
+const DEFAULT_PAYMENT_METHODS = [
+  { id: "cash", label: "Cash", enabled: true },
+  { id: "bank", label: "Bank", enabled: true },
+  { id: "credit-card", label: "Credit Card", enabled: true },
+];
+
+function normalizeMethodId(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function parsePaymentMethods(raw) {
+  try {
+    const parsed = JSON.parse(String(raw || ""));
+    if (!Array.isArray(parsed)) return DEFAULT_PAYMENT_METHODS;
+    const normalized = parsed
+      .map((m) => {
+        const label = String(m?.label || "").trim();
+        const id = normalizeMethodId(m?.id || label);
+        if (!id || !label) return null;
+        return { id, label, enabled: m?.enabled !== false };
+      })
+      .filter(Boolean);
+    return normalized.length ? normalized : DEFAULT_PAYMENT_METHODS;
+  } catch {
+    return DEFAULT_PAYMENT_METHODS;
+  }
+}
 
 function formatShort(ts) {
   if (ts == null || ts === "") return null;
@@ -40,6 +73,30 @@ function formatShort(ts) {
 
 function newLineKey() {
   return `ln-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function isVoidedInvoice(inv) {
+  return String(inv?.status || "").toLowerCase() === "voided";
+}
+
+function isVoidedPayment(payment) {
+  return String(payment?.status || "").toLowerCase() === "voided";
+}
+
+function confirmDestructiveAction({ title, message, confirmText, onConfirm }) {
+  if (Platform.OS === "web") {
+    const ok = globalThis?.confirm ? globalThis.confirm(`${title}\n\n${message}`) : true;
+    if (ok) onConfirm();
+    return;
+  }
+  Alert.alert(title, message, [
+    { text: "Cancel", style: "cancel" },
+    {
+      text: confirmText,
+      style: "destructive",
+      onPress: onConfirm,
+    },
+  ]);
 }
 
 /** Line items for the invoice form from the opportunity's accepted quotation for this project, or null if none. */
@@ -67,6 +124,11 @@ export default function FinanceScreen() {
   const repos = useRepos();
   const router = useRouter();
   const currencyCode = repos.appSettings.getSnapshot().currency || "UGX";
+  const paymentMethodsRaw = repos.appSettings.get(PAYMENT_METHODS_KEY);
+  const paymentMethods = useMemo(
+    () => parsePaymentMethods(paymentMethodsRaw).filter((m) => m.enabled),
+    [paymentMethodsRaw]
+  );
   // Shadow the legacy `ugx()` formatter so we can reuse existing JSX without changing every call site.
   const ugx = (n) => formatMoney(n, currencyCode);
   const { invoiceProjectId, invoiceTaskTitle } = useLocalSearchParams();
@@ -100,10 +162,13 @@ export default function FinanceScreen() {
   const [newSupName, setNewSupName] = useState("");
   const [newSupCategory, setNewSupCategory] = useState("");
   const [newSupContact, setNewSupContact] = useState("");
+  const [invoiceEditId, setInvoiceEditId] = useState(null);
+  const [invoiceActionTarget, setInvoiceActionTarget] = useState(null);
+  const [paymentActionTarget, setPaymentActionTarget] = useState(null);
   const [category, setCategory] = useState("");
   const [payInvId, setPayInvId] = useState(null);
   const [payAmount, setPayAmount] = useState("");
-  const [payMethod, setPayMethod] = useState("cash");
+  const [payMethod, setPayMethod] = useState(paymentMethods[0]?.id || "cash");
   const [payIncludeThankYou, setPayIncludeThankYou] = useState(true);
   const [projects, setProjects] = useState([]);
 
@@ -125,9 +190,20 @@ export default function FinanceScreen() {
   useFocusEffect(useCallback(() => refresh(), [refresh]));
 
   useEffect(() => {
+    if (!paymentMethods.length) {
+      setPayMethod("");
+      return;
+    }
+    if (!paymentMethods.some((m) => m.id === payMethod)) {
+      setPayMethod(paymentMethods[0].id);
+    }
+  }, [paymentMethods, payMethod]);
+
+  useEffect(() => {
     const pid = Array.isArray(invoiceProjectId) ? invoiceProjectId[0] : invoiceProjectId;
     const taskTitle = Array.isArray(invoiceTaskTitle) ? invoiceTaskTitle[0] : invoiceTaskTitle;
     if (!pid) return;
+    setInvoiceEditId(null);
     setProjId(pid);
     const fromQuote = invoiceLinesFromAcceptedQuotation(repos, pid);
     if (fromQuote) setLineItems(fromQuote);
@@ -152,6 +228,7 @@ export default function FinanceScreen() {
   const paidByInvoice = useMemo(() => {
     const m = {};
     for (const p of payments) {
+      if (isVoidedPayment(p)) continue;
       const id = p.invoice_id;
       m[id] = (m[id] || 0) + Number(p.amount);
     }
@@ -159,7 +236,7 @@ export default function FinanceScreen() {
   }, [payments]);
 
   const paymentInvoiceRows = useMemo(() => {
-    return invoices.map((inv) => {
+    return invoices.filter((inv) => !isVoidedInvoice(inv)).map((inv) => {
       const proj = projectById[inv.project_id];
       let clientName = null;
       if (proj?.opportunity_id) {
@@ -176,8 +253,15 @@ export default function FinanceScreen() {
         due: repos.finance.amountDue(inv.id),
         total: invoiceTotal(inv),
       };
-    });
+    }).filter((row) => row.due > 0.001);
   }, [invoices, projectById, repos]);
+
+  const payableInvoiceCount = paymentInvoiceRows.length;
+  const selectedPaymentInvoiceDue = useMemo(() => {
+    if (!payInvId) return null;
+    const row = paymentInvoiceRows.find((x) => x.inv.id === payInvId);
+    return row ? Math.max(0, Number(row.due) || 0) : null;
+  }, [payInvId, paymentInvoiceRows]);
 
   async function exportInvoicePdf(inv) {
     const snap = repos.appSettings.getSnapshot();
@@ -333,6 +417,7 @@ export default function FinanceScreen() {
       receiptDateStr: formatShort(rec?.generated_at ?? payment.paid_at ?? payment.created_at),
       paymentDateStr: formatShort(payment.paid_at ?? payment.created_at),
       paymentMethod: payment.method || null,
+      paymentStatus: payment.status || "posted",
       paymentAmount: Number(payment.amount),
       invoiceTotalStr: invoiceTotalAmount != null ? formatMoney(invoiceTotalAmount, cc) : null,
       outstandingInvoiceStr: invoiceOutstanding != null ? formatMoney(invoiceOutstanding, cc) : null,
@@ -375,6 +460,7 @@ export default function FinanceScreen() {
     refresh();
     setProjects(repos.projects.list());
     if (kind === "invoice") {
+      setInvoiceEditId(null);
       setProjId(null);
       setLineItems([{ key: newLineKey(), description: "", quantity: "1", unitPrice: "" }]);
       applyInvoiceDefaults();
@@ -392,7 +478,7 @@ export default function FinanceScreen() {
     } else {
       setPayInvId(null);
       setPayAmount("");
-      setPayMethod("cash");
+      setPayMethod(paymentMethods[0]?.id || "cash");
       setPayIncludeThankYou(true);
       setPaymentModal(true);
     }
@@ -418,6 +504,51 @@ export default function FinanceScreen() {
     return repos.retainers.get(p.retainer_id);
   }, [projId, projectById, repos]);
 
+  function openEditInvoice(inv) {
+    const latest = repos.invoices.get(inv.id);
+    if (!latest || isVoidedInvoice(latest)) return;
+    setInvoiceEditId(latest.id);
+    setProjId(latest.project_id);
+    const rows = repos.invoiceLineItems.listByInvoice(latest.id);
+    setLineItems(
+      rows.length
+        ? rows.map((r) => ({
+            key: r.id || newLineKey(),
+            description: String(r.description || ""),
+            quantity: String(r.quantity ?? 1),
+            unitPrice: String(r.unit_price ?? ""),
+          }))
+        : [{ key: newLineKey(), description: "", quantity: "1", unitPrice: "" }]
+    );
+    setIncludeVat(Number(latest.tax_amount ?? latest.tax ?? 0) > 0.001);
+    if (latest.issued_date && latest.due_date) {
+      const deltaDays = Math.round((Number(latest.due_date) - Number(latest.issued_date)) / 86400000);
+      setDueInDays(deltaDays > 0 ? String(deltaDays) : "");
+    } else {
+      setDueInDays("");
+    }
+    setRetainerApply("");
+    setInvoiceModal(true);
+  }
+
+  function normalizeInvoiceState(inv, balance) {
+    if (isVoidedInvoice(inv)) return "voided";
+    const raw = String(inv?.status || "issued").toLowerCase();
+    if (raw === "paid") return "paid";
+    if (raw === "sent" && Number(balance) <= 0.001) return "paid";
+    if (raw === "sent") return "sent";
+    return "issued";
+  }
+
+  function markInvoiceSent(inv) {
+    try {
+      repos.invoices.update(inv.id, { status: "sent" }, { expectedUpdatedAt: inv.updated_at });
+      refresh();
+    } catch (e) {
+      Alert.alert("Unable to mark sent", String(e?.message || e));
+    }
+  }
+
   function saveInvoice() {
     if (!projId) return;
     const lines = lineItems
@@ -434,16 +565,39 @@ export default function FinanceScreen() {
     if (rawDue !== "" && !Number.isNaN(Number(rawDue))) {
       due = Date.now() + Number(rawDue) * 86400000;
     }
-    const inv = repos.invoices.insert({
-      project_id: projId,
-      sub_total: totals.subTotal,
-      tax: totals.taxAmount,
-      tax_amount: totals.taxAmount,
-      tax_rate: totals.taxRate,
-      total_amount: totals.totalAmount,
-      status: "issued",
-      due_date: due,
-    });
+    let inv = null;
+    if (invoiceEditId) {
+      const current = repos.invoices.get(invoiceEditId);
+      if (!current) {
+        Alert.alert("Invoice not found", "Reload and try again.");
+        return;
+      }
+      inv = repos.invoices.update(
+        invoiceEditId,
+        {
+          project_id: projId,
+          sub_total: totals.subTotal,
+          tax: totals.taxAmount,
+          tax_amount: totals.taxAmount,
+          tax_rate: totals.taxRate,
+          total_amount: totals.totalAmount,
+          due_date: due,
+          status: current.status || "issued",
+        },
+        { expectedUpdatedAt: current.updated_at }
+      );
+    } else {
+      inv = repos.invoices.insert({
+        project_id: projId,
+        sub_total: totals.subTotal,
+        tax: totals.taxAmount,
+        tax_amount: totals.taxAmount,
+        tax_rate: totals.taxRate,
+        total_amount: totals.totalAmount,
+        status: "issued",
+        due_date: due,
+      });
+    }
     repos.invoiceLineItems.replaceForInvoice(
       inv.id,
       lines.map((ln) => ({
@@ -453,7 +607,7 @@ export default function FinanceScreen() {
       }))
     );
     let applyAmt = 0;
-    if (selectedRetainer && retainerApply.trim() !== "") {
+    if (!invoiceEditId && selectedRetainer && retainerApply.trim() !== "") {
       applyAmt = Number(retainerApply.replace(/,/g, ""));
       if (!Number.isNaN(applyAmt)) {
         applyAmt = Math.max(
@@ -474,6 +628,7 @@ export default function FinanceScreen() {
       }
     }
     setInvoiceModal(false);
+    setInvoiceEditId(null);
     refresh();
     setTab("invoices");
   }
@@ -574,11 +729,34 @@ export default function FinanceScreen() {
   }
 
   function savePayment() {
-    if (!payInvId || !payAmount.trim()) return;
+    if (!payInvId || !payAmount.trim() || !payMethod) return;
+    const selectedInvoice = repos.invoices.get(payInvId);
+    if (!selectedInvoice || isVoidedInvoice(selectedInvoice)) {
+      Alert.alert("Invoice unavailable", "This invoice is voided and cannot receive payments.");
+      return;
+    }
+    const amount = Number(payAmount.replace(/,/g, ""));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert("Invalid amount", "Enter a payment amount greater than zero.");
+      return;
+    }
+    const outstandingDue = Math.max(0, repos.finance.amountDue(payInvId));
+    if (outstandingDue <= 0.001) {
+      Alert.alert("Invoice fully paid", "The selected invoice has no outstanding balance.");
+      return;
+    }
+    if (amount > outstandingDue + 0.001) {
+      Alert.alert(
+        "Amount exceeds balance",
+        `Maximum payment for this invoice is ${ugx(outstandingDue)}.`
+      );
+      return;
+    }
+    const methodLabel = paymentMethods.find((m) => m.id === payMethod)?.label || payMethod;
     const pay = repos.payments.insert({
       invoice_id: payInvId,
-      amount: Number(payAmount.replace(/,/g, "")),
-      method: payMethod.trim() || "cash",
+      amount,
+      method: methodLabel,
     });
     const invRow = repos.invoices.get(payInvId);
     const projRow = invRow ? repos.projects.get(invRow.project_id) : null;
@@ -607,6 +785,45 @@ export default function FinanceScreen() {
       },
       { text: "OK", style: "cancel" },
     ]);
+  }
+
+  function voidPayment(payment) {
+    if (!payment || isVoidedPayment(payment)) return;
+    confirmDestructiveAction({
+      title: "Void payment?",
+      message: "Voided payments are excluded from reporting and invoice balances.",
+      confirmText: "Void payment",
+      onConfirm: () => {
+        try {
+          repos.payments.update(payment.id, { status: "voided" });
+          refresh();
+        } catch (e) {
+          Alert.alert("Unable to void payment", String(e?.message || e));
+        }
+      },
+    });
+  }
+
+  function voidInvoice(inv) {
+    if (!inv || isVoidedInvoice(inv)) return;
+    const paid = Number(paidByInvoice[inv.id] || 0);
+    if (paid > 0.0001) {
+      Alert.alert("Cannot void invoice", "Invoices with recorded payments cannot be voided.");
+      return;
+    }
+    confirmDestructiveAction({
+      title: "Void invoice?",
+      message: "Voided invoices are excluded from reporting and shown as void on PDF export.",
+      confirmText: "Void invoice",
+      onConfirm: () => {
+        try {
+          repos.invoices.update(inv.id, { status: "voided" }, { expectedUpdatedAt: inv.updated_at });
+          refresh();
+        } catch (e) {
+          Alert.alert("Unable to void invoice", String(e?.message || e));
+        }
+      },
+    });
   }
 
   const listData = tab === "invoices" ? invoices : tab === "expenses" ? expenses : payments;
@@ -640,21 +857,28 @@ export default function FinanceScreen() {
   function renderCard({ item }) {
     if (tab === "invoices") {
       const inv = item;
+      const isVoided = isVoidedInvoice(inv);
       const total = invoiceTotal(inv);
       const paid = paidByInvoice[inv.id] || 0;
       const retainerApplied = repos.retainerApplications
         .listByInvoice(inv.id)
         .reduce((s, a) => s + Number(a.amount_applied), 0);
       const balance = repos.finance.amountDue(inv.id);
+      const flowState = normalizeInvoiceState(inv, balance);
+      const canVoid = flowState === "sent" && Number(paid) <= 0.0001;
       const projName = projectById[inv.project_id]?.name || "Project";
-      const isPaid = balance <= 0.001;
-      const isOverdue = !isPaid && inv.due_date != null && Number(inv.due_date) < Date.now();
+      const isPaid = flowState === "paid";
+      const isOverdue = flowState === "sent" && inv.due_date != null && Number(inv.due_date) < Date.now();
       const dueStr = formatShort(inv.due_date);
 
       let borderAccent = colors.primary;
       let amountTone = "default";
-      let badge = { label: (inv.status || "issued").replace(/\b\w/g, (c) => c.toUpperCase()), tone: "neutral" };
-      if (isPaid) {
+      let badge = { label: flowState.replace(/\b\w/g, (c) => c.toUpperCase()), tone: "neutral" };
+      if (flowState === "voided") {
+        borderAccent = colors.onSecondaryVariant;
+        amountTone = "default";
+        badge = { label: "Voided", tone: "neutral" };
+      } else if (flowState === "paid") {
         borderAccent = colors.financePositive;
         amountTone = "positive";
         badge = { label: "Paid", tone: "positive" };
@@ -674,14 +898,24 @@ export default function FinanceScreen() {
           amount={ugx(total)}
           amountTone={amountTone}
           detail={
-            isPaid
+            isVoided
+              ? "Voided invoice — excluded from reporting."
+              : isPaid
               ? `Collected ${ugx(paid)}${creditBit}`
               : `Balance ${ugx(balance)} · Paid ${ugx(paid)}${creditBit}${dueStr ? ` · Due ${dueStr}` : ""}`
           }
           badge={badge}
           borderAccent={borderAccent}
-          action={isOverdue && !isPaid ? { label: "WhatsApp reminder", onPress: () => openInvoiceReminder(inv) } : null}
-          secondaryAction={{ label: "Export PDF", onPress: () => exportInvoicePdf(inv) }}
+          action={{
+            label: "Actions",
+            onPress: () => {
+              setInvoiceActionTarget({
+                invoiceId: inv.id,
+                flowState,
+                canVoid,
+              });
+            },
+          }}
         />
       );
     }
@@ -709,6 +943,7 @@ export default function FinanceScreen() {
     }
 
     const p = item;
+    const paymentVoided = isVoidedPayment(p);
     const inv = invoiceById[p.invoice_id];
     const projName = inv ? projectById[inv.project_id]?.name : null;
     const sub = projName
@@ -722,10 +957,19 @@ export default function FinanceScreen() {
         title="Payment received"
         subtitle={sub}
         amount={ugx(p.amount)}
-        amountTone="payment"
-        detail={[p.method, when ? when : null, recBit].filter(Boolean).join(" · ")}
-        badge={rec ? { label: "Receipt", tone: "neutral", onPress: () => void exportPaymentReceiptPdf(p, rec) } : null}
+        amountTone={paymentVoided ? "default" : "payment"}
+        detail={paymentVoided ? ["Voided payment", p.method, when ? when : null, recBit].filter(Boolean).join(" · ") : [p.method, when ? when : null, recBit].filter(Boolean).join(" · ")}
+        badge={paymentVoided ? { label: "Voided", tone: "neutral" } : rec ? { label: "Receipt", tone: "neutral" } : null}
         borderAccent={colors.financePayment}
+        action={{
+          label: "Actions",
+          onPress: () => {
+            setPaymentActionTarget({
+              paymentId: p.id,
+              canVoid: !paymentVoided,
+            });
+          },
+        }}
       />
     );
   }
@@ -810,7 +1054,11 @@ export default function FinanceScreen() {
       />
       <FinanceNewMenu visible={menu} onClose={() => setMenu(false)} onSelect={pick} />
 
-      <SimpleModal visible={invoiceModal} title="New invoice" onClose={() => setInvoiceModal(false)}>
+      <SimpleModal
+        visible={invoiceModal}
+        title={invoiceEditId ? "Edit invoice" : "New invoice"}
+        onClose={() => setInvoiceModal(false)}
+      >
         <Text style={sharedStyles.pickerLabel}>Project *</Text>
         <View style={sharedStyles.chipRow}>
           {projects.map((p) => (
@@ -916,10 +1164,97 @@ export default function FinanceScreen() {
           placeholder="Optional"
         />
         <PrimaryButton
-          title="Save invoice"
+          title={invoiceEditId ? "Save changes" : "Save invoice"}
           onPress={saveInvoice}
           disabled={!projId || parsedLinesForTotals.length === 0}
         />
+      </SimpleModal>
+
+      <SimpleModal
+        visible={Boolean(invoiceActionTarget)}
+        title="Invoice actions"
+        onClose={() => setInvoiceActionTarget(null)}
+      >
+        {invoiceActionTarget?.flowState === "issued" ? (
+          <>
+            <Pressable
+              style={styles.invoiceActionBtn}
+              onPress={() => {
+                const inv = repos.invoices.get(invoiceActionTarget.invoiceId);
+                setInvoiceActionTarget(null);
+                if (inv) openEditInvoice(inv);
+              }}
+            >
+              <Text style={styles.invoiceActionBtnText}>Edit</Text>
+            </Pressable>
+            <Pressable
+              style={styles.invoiceActionBtn}
+              onPress={() => {
+                const inv = repos.invoices.get(invoiceActionTarget.invoiceId);
+                setInvoiceActionTarget(null);
+                if (inv) markInvoiceSent(inv);
+              }}
+            >
+              <Text style={styles.invoiceActionBtnText}>Mark sent</Text>
+            </Pressable>
+          </>
+        ) : null}
+        {invoiceActionTarget?.flowState === "sent" && invoiceActionTarget?.canVoid ? (
+          <Pressable
+            style={[styles.invoiceActionBtn, styles.invoiceActionDangerBtn]}
+            onPress={() => {
+              const inv = repos.invoices.get(invoiceActionTarget.invoiceId);
+              setInvoiceActionTarget(null);
+              if (inv) voidInvoice(inv);
+            }}
+          >
+            <Text style={[styles.invoiceActionBtnText, styles.invoiceActionDangerText]}>Void invoice</Text>
+          </Pressable>
+        ) : null}
+        {invoiceActionTarget ? (
+          <Pressable
+            style={styles.invoiceActionBtn}
+            onPress={() => {
+              const inv = repos.invoices.get(invoiceActionTarget.invoiceId);
+              setInvoiceActionTarget(null);
+              if (inv) void exportInvoicePdf(inv);
+            }}
+          >
+            <Text style={styles.invoiceActionBtnText}>Export PDF</Text>
+          </Pressable>
+        ) : null}
+      </SimpleModal>
+
+      <SimpleModal
+        visible={Boolean(paymentActionTarget)}
+        title="Payment actions"
+        onClose={() => setPaymentActionTarget(null)}
+      >
+        {paymentActionTarget ? (
+          <Pressable
+            style={styles.invoiceActionBtn}
+            onPress={() => {
+              const pay = repos.payments.get(paymentActionTarget.paymentId);
+              const rec = pay ? repos.receipts.getByPaymentId(pay.id) : null;
+              setPaymentActionTarget(null);
+              if (pay) void exportPaymentReceiptPdf(pay, rec);
+            }}
+          >
+            <Text style={styles.invoiceActionBtnText}>Export PDF</Text>
+          </Pressable>
+        ) : null}
+        {paymentActionTarget?.canVoid ? (
+          <Pressable
+            style={[styles.invoiceActionBtn, styles.invoiceActionDangerBtn]}
+            onPress={() => {
+              const pay = repos.payments.get(paymentActionTarget.paymentId);
+              setPaymentActionTarget(null);
+              if (pay) voidPayment(pay);
+            }}
+          >
+            <Text style={[styles.invoiceActionBtnText, styles.invoiceActionDangerText]}>Void payment</Text>
+          </Pressable>
+        ) : null}
       </SimpleModal>
 
       <SimpleModal visible={expenseModal} title="New expense" onClose={() => setExpenseModal(false)}>
@@ -1002,8 +1337,8 @@ export default function FinanceScreen() {
 
       <SimpleModal visible={paymentModal} title="Record payment" onClose={() => setPaymentModal(false)}>
         <Text style={sharedStyles.pickerLabel}>Invoice *</Text>
-        {invoices.length === 0 ? (
-          <Text style={sharedStyles.hint}>Create an invoice first.</Text>
+        {payableInvoiceCount === 0 ? (
+          <Text style={sharedStyles.hint}>Create a non-voided invoice first.</Text>
         ) : (
           <ScrollView
             style={styles.payInvoiceScroll}
@@ -1067,7 +1402,27 @@ export default function FinanceScreen() {
           </ScrollView>
         )}
         <FormField label="Amount *" value={payAmount} onChangeText={setPayAmount} keyboardType="decimal-pad" />
-        <FormField label="Method" value={payMethod} onChangeText={setPayMethod} placeholder="cash, momo, bank…" />
+        {payInvId && selectedPaymentInvoiceDue != null ? (
+          <Text style={sharedStyles.hint}>Max allowed for selected invoice: {ugx(selectedPaymentInvoiceDue)}</Text>
+        ) : null}
+        <Text style={sharedStyles.pickerLabel}>Payment method *</Text>
+        {paymentMethods.length ? (
+          <View style={sharedStyles.chipRow}>
+            {paymentMethods.map((m) => (
+              <Pressable
+                key={m.id}
+                style={[sharedStyles.chip, payMethod === m.id && sharedStyles.chipActive]}
+                onPress={() => setPayMethod(m.id)}
+              >
+                <Text style={[sharedStyles.chipText, payMethod === m.id && sharedStyles.chipTextActive]}>
+                  {m.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <Text style={sharedStyles.hint}>No payment methods enabled. Enable one in Settings.</Text>
+        )}
         <Pressable
           onPress={() => setPayIncludeThankYou((v) => !v)}
           style={styles.thankYouToggle}
@@ -1078,7 +1433,7 @@ export default function FinanceScreen() {
             {payIncludeThankYou ? "✓ " : ""}Include suggested thank-you line for client (when client is known via opportunity)
           </Text>
         </Pressable>
-        <PrimaryButton title="Save payment" onPress={savePayment} disabled={!payInvId || !payAmount.trim()} />
+        <PrimaryButton title="Save payment" onPress={savePayment} disabled={!payInvId || !payAmount.trim() || !payMethod} />
       </SimpleModal>
     </View>
   );
@@ -1163,6 +1518,18 @@ const styles = StyleSheet.create({
   tabTxtOn: { color: colors.primary, fontFamily: fonts.bodyBold },
   tabHint: { paddingHorizontal: space.safe, marginTop: space.sm },
   tabHintTxt: { fontSize: 12, fontFamily: fonts.body, color: colors.onSecondaryVariant },
+  invoiceActionBtn: {
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.outlineVariant,
+    backgroundColor: colors.secondaryContainer,
+    paddingVertical: 12,
+    paddingHorizontal: space.md,
+    marginBottom: space.sm,
+  },
+  invoiceActionBtnText: { fontSize: 14, fontFamily: fonts.bodySemi, color: colors.primary },
+  invoiceActionDangerBtn: { borderColor: colors.financeExpense, backgroundColor: colors.surfaceContainerLowest },
+  invoiceActionDangerText: { color: colors.financeExpense },
   list: { paddingBottom: 120, paddingTop: space.sm },
   listEmpty: { flexGrow: 1, paddingBottom: 120 },
   emptyWrap: { flex: 1, minHeight: 280, paddingHorizontal: space.safe },

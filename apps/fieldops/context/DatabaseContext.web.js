@@ -1,14 +1,16 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { createRepos, createSqlJsEngine, createSyncInboundApplier, runMigrations } from "@servops/core";
+import { createRepos, createSqlJsEngine, createSyncInboundApplier, runMigrations } from "@lunabms/core";
 import { createSyncService } from "../lib/syncService";
 import { createLocalDatasetArchiveManager } from "./localDatasetArchive";
 
 const DatabaseContext = createContext(null);
 
-const IDB_NAME = "servops-fieldops";
-const IDB_VERSION = 1;
+const IDB_NAME = "luna-bms-fieldops";
+const IDB_VERSION = 3;
 const IDB_STORE = "sqliteBlob";
+const IDB_MEDIA_STORE = "mediaObjects";
+const IDB_LIBRARY_STORE = "mediaLibrary";
 const IDB_KEY = "fieldops.db";
 const IDB_ARCHIVE_PREFIX = "tenantArchive:";
 const PERSIST_DEBOUNCE_MS = 200;
@@ -26,6 +28,12 @@ function openIdb() {
       const db = ev.target.result;
       if (!db.objectStoreNames.contains(IDB_STORE)) {
         db.createObjectStore(IDB_STORE);
+      }
+      if (!db.objectStoreNames.contains(IDB_MEDIA_STORE)) {
+        db.createObjectStore(IDB_MEDIA_STORE);
+      }
+      if (!db.objectStoreNames.contains(IDB_LIBRARY_STORE)) {
+        db.createObjectStore(IDB_LIBRARY_STORE);
       }
     };
   });
@@ -182,10 +190,10 @@ export function DatabaseProvider({ children }) {
       try {
         const data = rawDb.export();
         saveSqliteBytes(data).catch((e) => {
-          console.warn("servops: failed to persist web sqlite", e);
+          console.warn("luna-bms: failed to persist web sqlite", e);
         });
       } catch (e) {
-        console.warn("servops: sqlite export failed", e);
+        console.warn("luna-bms: sqlite export failed", e);
       }
     };
 
@@ -222,7 +230,7 @@ export function DatabaseProvider({ children }) {
           rawDb =
             existing && existing.byteLength > 0 ? new SQL.Database(existing) : new SQL.Database();
         } catch (loadErr) {
-          console.warn("servops: corrupted or incompatible persisted sqlite; starting fresh", loadErr);
+          console.warn("luna-bms: corrupted or incompatible persisted sqlite; starting fresh", loadErr);
           rawDb = new SQL.Database();
         }
 
@@ -274,10 +282,10 @@ export function DatabaseProvider({ children }) {
         try {
           const data = rawDb.export();
           saveSqliteBytes(data).catch((e) => {
-            console.warn("servops: failed to persist web sqlite on unload", e);
+            console.warn("luna-bms: failed to persist web sqlite on unload", e);
           });
         } catch (e) {
-          console.warn("servops: sqlite export on unload failed", e);
+          console.warn("luna-bms: sqlite export on unload failed", e);
         }
         try {
           rawDb.close();

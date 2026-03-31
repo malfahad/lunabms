@@ -2,12 +2,12 @@
   "expo": {
     "name": "Luna BMS",
     "description": "Luna Business Management System",
-    "slug": "servops-fieldops",
+    "slug": "luna-bms-fieldops",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "scheme": "servops-fieldops",
+    "scheme": "luna-bms-fieldops",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -15,14 +15,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.servops.fieldops"
+      "bundleIdentifier": "com.lunabms.fieldops"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#00333f"
       },
-      "package": "com.servops.fieldops"
+      "package": "com.lunabms.fieldops"
     },
     "web": {
       "bundler": "metro",

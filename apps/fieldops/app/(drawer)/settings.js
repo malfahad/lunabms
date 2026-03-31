@@ -11,6 +11,48 @@ import { sharedStyles } from "../../theme/styles";
 import { colors, fonts, radius, space } from "../../theme/tokens";
 
 const CURRENCY_OPTIONS = ["UGX", "USD", "KES", "EUR", "CNY", "AED"];
+const PAYMENT_METHODS_KEY = "payment_methods";
+const DEFAULT_PAYMENT_METHODS = [
+  { id: "cash", label: "Cash", enabled: true },
+  { id: "bank", label: "Bank", enabled: true },
+  { id: "credit-card", label: "Credit Card", enabled: true },
+];
+
+function normalizeMethodId(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function parsePaymentMethods(raw) {
+  try {
+    const parsed = JSON.parse(String(raw || ""));
+    if (!Array.isArray(parsed)) return DEFAULT_PAYMENT_METHODS;
+    const normalized = parsed
+      .map((m) => {
+        const label = String(m?.label || "").trim();
+        const id = normalizeMethodId(m?.id || label);
+        if (!id || !label) return null;
+        return { id, label, enabled: m?.enabled !== false };
+      })
+      .filter(Boolean);
+    return normalized.length ? normalized : DEFAULT_PAYMENT_METHODS;
+  } catch {
+    return DEFAULT_PAYMENT_METHODS;
+  }
+}
+
+function serializePaymentMethods(methods) {
+  return JSON.stringify(
+    methods.map((m) => ({
+      id: normalizeMethodId(m.id || m.label),
+      label: String(m.label || "").trim(),
+      enabled: m.enabled !== false,
+    }))
+  );
+}
 
 function formatLicenseInfo(licenseExpiresAt) {
   const raw = String(licenseExpiresAt || "").trim();
@@ -42,6 +84,9 @@ export default function SettingsScreen() {
   const [defaultDueDays, setDefaultDueDays] = useState("");
   const [currency, setCurrency] = useState("UGX");
   const [currencyModal, setCurrencyModal] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState(DEFAULT_PAYMENT_METHODS);
+  const [paymentMethodModal, setPaymentMethodModal] = useState(false);
+  const [newPaymentMethod, setNewPaymentMethod] = useState("");
   const [saveHint, setSaveHint] = useState("");
 
   const loadProfile = useCallback(() => {
@@ -55,6 +100,7 @@ export default function SettingsScreen() {
     setDefaultIncludeVat(s.default_include_vat === "1");
     setDefaultDueDays(s.default_invoice_due_days || "");
     setCurrency(s.currency || "UGX");
+    setPaymentMethods(parsePaymentMethods(repos.appSettings.get(PAYMENT_METHODS_KEY)));
   }, [repos]);
 
   const refresh = useCallback(() => {
@@ -84,6 +130,7 @@ export default function SettingsScreen() {
     repos.appSettings.set("default_include_vat", defaultIncludeVat ? "1" : "0");
     repos.appSettings.set("default_invoice_due_days", defaultDueDays.trim());
     repos.appSettings.set("currency", currency);
+    repos.appSettings.set(PAYMENT_METHODS_KEY, serializePaymentMethods(paymentMethods));
     setCompanyLogoUrl(nextRemoteLogo);
     setPendingLogoUri("");
     setSaveHint("Saved. New invoices will use these defaults.");
@@ -96,6 +143,23 @@ export default function SettingsScreen() {
   }
 
   const license = formatLicenseInfo(db.sync?.profile?.licenseExpiresAt);
+
+  function togglePaymentMethod(methodId) {
+    setPaymentMethods((rows) => rows.map((m) => (m.id === methodId ? { ...m, enabled: !m.enabled } : m)));
+  }
+
+  function addPaymentMethod() {
+    const label = newPaymentMethod.trim();
+    if (!label) return;
+    const id = normalizeMethodId(label);
+    if (!id) return;
+    setPaymentMethods((rows) => {
+      if (rows.some((m) => m.id === id)) return rows;
+      return [...rows, { id, label, enabled: true }];
+    });
+    setNewPaymentMethod("");
+    setPaymentMethodModal(false);
+  }
 
   async function chooseLogoFromLibrary() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -202,6 +266,41 @@ export default function SettingsScreen() {
           placeholder="Optional — e.g. 14"
           keyboardType="number-pad"
         />
+        <Text style={styles.fieldLabel}>Payment methods</Text>
+        <Text style={styles.hintText}>Enable methods to show in payment entry. Add custom methods as needed.</Text>
+        <View style={sharedStyles.chipRow}>
+          {paymentMethods.map((m) => (
+            <Pressable
+              key={m.id}
+              style={[sharedStyles.chip, m.enabled && sharedStyles.chipActive]}
+              onPress={() => togglePaymentMethod(m.id)}
+            >
+              <Text style={[sharedStyles.chipText, m.enabled && sharedStyles.chipTextActive]}>
+                {m.enabled ? "✓ " : ""}{m.label}
+              </Text>
+            </Pressable>
+          ))}
+          <Pressable style={styles.addMethodPill} onPress={() => setPaymentMethodModal(true)}>
+            <Text style={styles.addMethodPillText}>+ Add method</Text>
+          </Pressable>
+        </View>
+        <SimpleModal visible={paymentMethodModal} title="Add payment method" onClose={() => setPaymentMethodModal(false)}>
+          <FormField
+            label="Method name"
+            value={newPaymentMethod}
+            onChangeText={setNewPaymentMethod}
+            placeholder="e.g. Mobile Money"
+          />
+          <PrimaryButton title="Add method" onPress={addPaymentMethod} disabled={!newPaymentMethod.trim()} />
+          <PrimaryButton
+            title="Cancel"
+            onPress={() => {
+              setPaymentMethodModal(false);
+              setNewPaymentMethod("");
+            }}
+            variant="secondary"
+          />
+        </SimpleModal>
         <PrimaryButton title="Save company & defaults" onPress={saveProfile} />
         {saveHint ? <Text style={styles.saveHint}>{saveHint}</Text> : null}
       </View>
@@ -295,6 +394,26 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   currencyRowText: { fontSize: 16, fontFamily: fonts.body, color: colors.onBackground },
+  hintText: {
+    fontSize: 13,
+    fontFamily: fonts.body,
+    color: colors.onSecondaryVariant,
+    marginHorizontal: space.md,
+    marginBottom: space.sm,
+  },
+  addMethodPill: {
+    borderRadius: radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primary,
+    backgroundColor: colors.secondaryContainer,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  addMethodPillText: {
+    fontSize: 13,
+    fontFamily: fonts.bodySemi,
+    color: colors.primary,
+  },
   saveHint: {
     fontSize: 13,
     fontFamily: fonts.body,

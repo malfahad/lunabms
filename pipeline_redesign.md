@@ -13,7 +13,7 @@ This document reviews two reference UIs (mobile list + Kanban board), compares t
 - **Card hierarchy** — Each lead is a **card** (not a single text row): avatar, **name + company**, **email/phone** with icons, **last activity** and **confidence %**, **stage pill**, **deal value** — scannable in seconds.
 - **Primary action** — Corner control (arrow) suggests “open record”; consistent with drill-down to detail.
 
-**Caveats for Servops**
+**Caveats for Luna BMS**
 
 - **Confidence / probability** — Our schema has `opportunity.status`, `estimated_value`, `captured_at`, and contact fields; we do **not** yet store a win-probability field. This can be **v2** (computed heuristic or explicit field) or omitted initially.
 - **Avatars** — No `photo_url` on clients/opportunities today; we can use **initials** in a circle (on-brand) until media sync exists.
@@ -30,7 +30,7 @@ This document reviews two reference UIs (mobile list + Kanban board), compares t
 - **Drag-and-drop** — Moving a card between columns maps directly to **changing stage** — fast for power users (sales/owners).
 - **Card density** — Photo, name, location/phone, badges (`New`, `Followed`), rating — supports triage without opening every record.
 
-**Caveats for Servops**
+**Caveats for Luna BMS**
 
 - **Platform split** — **React Native** Kanban + DnD is non-trivial (`react-native-reanimated`, `react-native-gesture-handler`, or platform-specific web drag APIs). **Web** can use CSS/grid + HTML5 DnD or a library earlier than native.
 - **Mobile vs desktop** — Full Kanban on **narrow phones** is cramped; reference B is often **tablet/desktop-first**. Plan: **list + chips on mobile**, **Kanban optional** on wide viewport / web (matches our responsive drawer pattern).
@@ -56,7 +56,7 @@ This document reviews two reference UIs (mobile list + Kanban board), compares t
 
 ---
 
-## 4. Design alignment (Servops “Digital Curator”)
+## 4. Design alignment (Luna BMS “Digital Curator”)
 
 The [design system](designsystem.md) favors **tonal surfaces**, **Manrope/Inter**, **teal primary** (`#00333f`), and **no harsh 1px dividers**. The revamp should:
 

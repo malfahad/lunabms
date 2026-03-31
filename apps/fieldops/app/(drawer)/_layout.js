@@ -115,6 +115,14 @@ export default function DrawerLayout() {
         }}
       />
       <Drawer.Screen
+        name="library"
+        options={{
+          title: "Library",
+          drawerLabel: "Library",
+          drawerIcon: ({ color, size }) => <MaterialIcons name="perm-media" color={color} size={size} />,
+        }}
+      />
+      <Drawer.Screen
         name="settings"
         options={{
           title: "Settings",

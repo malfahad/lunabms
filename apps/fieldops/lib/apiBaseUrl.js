@@ -1,4 +1,9 @@
 const FALLBACK_API_BASE_URL = "http://localhost:8000";
+// Expo statically inlines EXPO_PUBLIC_* vars only on direct member access.
+const BUILD_TIME_EXPO_PUBLIC_API_BASE_URL =
+  typeof process !== "undefined" ? process.env.EXPO_PUBLIC_API_BASE_URL : "";
+const BUILD_TIME_API_BASE_URL =
+  typeof process !== "undefined" ? process.env.API_BASE_URL : "";
 
 function normalizeBaseUrl(value) {
   const raw = String(value || "").trim();
@@ -8,10 +13,7 @@ function normalizeBaseUrl(value) {
 
 export function resolveApiBaseUrl() {
   // 1) Build-time env vars (mobile/web local dev and CI builds).
-  const envBaseUrl =
-    (typeof process !== "undefined" && process?.env?.API_BASE_URL) ||
-    (typeof process !== "undefined" && process?.env?.EXPO_PUBLIC_API_BASE_URL) ||
-    "";
+  const envBaseUrl = BUILD_TIME_EXPO_PUBLIC_API_BASE_URL || BUILD_TIME_API_BASE_URL || "";
   const fromEnv = normalizeBaseUrl(envBaseUrl);
   if (fromEnv) return fromEnv;
 
